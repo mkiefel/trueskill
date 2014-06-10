@@ -1,7 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
 
-import           Control.Applicative ( (<$>), pure )
 import           Control.Lens
 import           Data.Number.Erf
 
@@ -119,7 +118,7 @@ differenceMarginal msg = Msg
 
     sqrtC = sqrt c
 
-normpdf x = exp (-x**2 / 2) / sqrt (2 * Prelude.pi)
+normpdf x = exp (-x**2 / 2) / sqrt (2 * pi)
 
 wWon t eps = vWon_ * (vWon_ + t - eps)
   where
