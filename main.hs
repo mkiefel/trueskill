@@ -50,24 +50,27 @@ exclude stateLeft stateRight =
       , _tau = stateLeft^.tau - stateRight^.tau
       }
 
-update :: Player -> Player -> Result -> (Player, Player)
-update playerLeft playerRight result =
-    ( update (fst treePassPlayers) playerLeft
-    , update (snd treePassPlayers) playerRight
+update :: [Player] -> [Player] -> Result -> ([Player], [Player])
+update playersLeft playersRight result =
+    ( update (fst treePassPlayers) playersLeft
+    , update (snd treePassPlayers) playersRight
     )
   where
-    players = (playerLeft, playerRight)
+    players = (playersLeft, playersRight)
 
-    update :: Msg -> Player -> Player
-    update msg player = skill %~ (`include` msg) $ player
+    update :: [Msg] -> [Player] -> [Player]
+    update = zipWith (\m p -> skill %~ (`include` m) $ p)
 
-    treePassPlayers = treePass (both %~ (view skill) $ players) result
+    treePassPlayers = treePass (both %~ (map (view skill)) $ players) result
 
-treePass :: (Msg, Msg) -> Result -> (Msg, Msg)
+treePass :: ([Msg], [Msg]) -> Result -> ([Msg], [Msg])
 treePass msgs Lost = swap $ treePass (swap msgs) Won
   where
     swap (a, b) = (b, a)
-treePass msgs result = both %~ (toSkill . toPerformance) $ fromDifferenceMsg
+treePass msgs result = both %~ (map toSkill) $
+    ( toPerformance (fst skillMsgs) (fst fromDifferenceMsg)
+    , toPerformance (snd skillMsgs) (snd fromDifferenceMsg)
+    )
   where
     fromDifferenceMsg :: (Msg, Msg)
     fromDifferenceMsg = fromDifference performanceMsgs (marginal `exclude` toDifferenceMsg)
@@ -79,8 +82,9 @@ treePass msgs result = both %~ (toSkill . toPerformance) $ fromDifferenceMsg
 
     toDifferenceMsg = toDifference performanceMsgs
 
-    performanceMsgs =
-      (both %~ (fromPerformance . fromSkill) $ msgs)
+    performanceMsgs = (both %~ fromPerformance $ skillMsgs)
+
+    skillMsgs = both %~ (map fromSkill) $ msgs
 
 
 fromSkill :: Msg -> Msg
@@ -101,8 +105,8 @@ weightedPass msgs = Msg
     piNew :: Double
     piNew = 1.0 / (sum $ map (\(a, m) -> a**2 / m^.pi_) msgs)
 
-fromPerformance :: Msg -> Msg
-fromPerformance msg = weightedPass [(1, msg)]
+fromPerformance :: [Msg] -> Msg
+fromPerformance msgs = weightedPass $ zip (repeat 1) msgs
 
 toDifference :: (Msg, Msg) -> Msg
 toDifference (performanceLeftMsg, performanceRightMsg) =
@@ -152,10 +156,16 @@ fromDifference (performanceLeftMsg, performanceRightMsg) toDifferenceFactorMsg =
     , weightedPass [(1, performanceLeftMsg), (-1, toDifferenceFactorMsg)]
     )
 
-toPerformance :: Msg -> Msg
-toPerformance = fromPerformance
+toPerformance :: [Msg] -> Msg -> [Msg]
+toPerformance fromPerformanceMsgs msg = go [] fromPerformanceMsgs
+  where
+    go _ []                    = []
+    go headMsgs (m : tailMsgs) = weightedPass ((1, msg) : (zipM1 headMsgs) ++ (zipM1 tailMsgs))
+        : go (m : headMsgs) tailMsgs
+
+    zipM1 msgs = zip (repeat (-1)) msgs
 
 toSkill :: Msg -> Msg
 toSkill = fromSkill
 
-main = print $ update a a Won
+main = print $ update [a] [a] Won
