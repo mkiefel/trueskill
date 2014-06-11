@@ -5,8 +5,8 @@ import           Control.Lens
 import           Data.Number.Erf
 
 data Msg = Msg
-  { _pi_  :: Double
-  , _tau :: Double
+  { _pi_  :: !Double
+  , _tau :: !Double
   }
 makeLenses ''Msg
 
@@ -17,12 +17,12 @@ instance Show Msg where
       mu = m^.tau * sigma2
 
 data Player = Player
-  { _identifier :: String
-  , _skill      :: Msg
+  { _identifier :: !String
+  , _skill      :: !Msg
   } deriving Show
 makeLenses ''Player
 
-data Result = Won | Lost
+data Result = Won | Lost | Draw
 
 a :: Player
 a = Player
@@ -51,7 +51,10 @@ exclude stateLeft stateRight =
       }
 
 update :: Player -> Player -> Result -> (Player, Player)
-update playerLeft playerRight result = (update (fst treePassPlayers) playerLeft, update (snd treePassPlayers) playerRight)
+update playerLeft playerRight result =
+  ( update (fst treePassPlayers) playerLeft
+  , update (snd treePassPlayers) playerRight
+  )
   where
     players = (playerLeft, playerRight)
 
@@ -64,13 +67,15 @@ treePass :: (Msg, Msg) -> Result -> (Msg, Msg)
 treePass msgs Lost = swap $ treePass (swap msgs) Won
   where
     swap (a, b) = (b, a)
-treePass msgs Won = both %~ (toSkill . toPerformance) $ fromDifferenceMsg
+treePass msgs result = both %~ (toSkill . toPerformance) $ fromDifferenceMsg
   where
     fromDifferenceMsg :: (Msg, Msg)
     fromDifferenceMsg = fromDifference performanceMsgs (marginal `exclude` toDifferenceMsg)
 
     marginal :: Msg
-    marginal = differenceMarginal toDifferenceMsg
+    marginal = case result of
+        Won  -> differenceMarginalWon  toDifferenceMsg
+        Draw -> differenceMarginalDraw toDifferenceMsg
 
     toDifferenceMsg = toDifference performanceMsgs
 
@@ -103,27 +108,43 @@ toDifference :: (Msg, Msg) -> Msg
 toDifference (performanceLeftMsg, performanceRightMsg) =
     weightedPass [(1, performanceLeftMsg), (-1, performanceRightMsg)]
 
-differenceMarginal :: Msg -> Msg
-differenceMarginal msg = Msg
-    { _pi_  = c / wWon_
-    , _tau = (d + sqrtC * vWon (d / sqrtC) (eps * sqrtC)) / wWon_
+normpdf x = exp (-x**2 / 2) / sqrt (2 * pi)
+
+differenceMarginalWon :: Msg -> Msg
+differenceMarginalWon msg = differenceMarginal vWon wWon msg
+  where
+    wWon t eps = vWon_ * (vWon_ + t - eps)
+      where
+        vWon_ = vWon t eps
+    vWon t eps = normpdf (t - eps) / normcdf (t - eps)
+
+differenceMarginalDraw :: Msg -> Msg
+differenceMarginalDraw msg = differenceMarginal vDraw wDraw msg
+  where
+    wDraw t eps = vDraw_**2 +
+        ((eps - t) * normpdf (eps - t) + (eps + t) * normpdf (eps + t)) /
+        (normcdf (eps - t) - normcdf (-eps - t))
+      where
+        vDraw_ = vDraw t eps
+
+    vDraw t eps = (normpdf (-eps - t) - normpdf (eps - t)) /
+        (normcdf (eps - t) - normcdf (-eps - t))
+
+differenceMarginal :: (Double -> Double -> Double) -> (Double -> Double -> Double) -> Msg -> Msg
+differenceMarginal vFun wFun msg = Msg
+    { _pi_  = c / wFun_
+    , _tau = (d + sqrtC * vFun_) / wFun_
     }
   where
-    eps = 0
+    eps = 0.25
 
-    wWon_ = 1 - wWon (d / sqrtC) (eps * sqrtC)
+    wFun_ = 1 - wFun (d / sqrtC) (eps * sqrtC)
+    vFun_ = vFun (d / sqrtC) (eps * sqrtC)
 
     c = msg^.pi_
     d = msg^.tau
 
     sqrtC = sqrt c
-
-normpdf x = exp (-x**2 / 2) / sqrt (2 * pi)
-
-wWon t eps = vWon_ * (vWon_ + t - eps)
-  where
-    vWon_ = vWon t eps
-vWon t eps = normpdf (t - eps) / normcdf (t - eps)
 
 fromDifference :: (Msg, Msg) -> Msg -> (Msg, Msg)
 fromDifference (performanceLeftMsg, performanceRightMsg) toDifferenceFactorMsg =
