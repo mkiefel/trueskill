@@ -52,9 +52,9 @@ exclude stateLeft stateRight =
 
 update :: Player -> Player -> Result -> (Player, Player)
 update playerLeft playerRight result =
-  ( update (fst treePassPlayers) playerLeft
-  , update (snd treePassPlayers) playerRight
-  )
+    ( update (fst treePassPlayers) playerLeft
+    , update (snd treePassPlayers) playerRight
+    )
   where
     players = (playerLeft, playerRight)
 
@@ -157,3 +157,5 @@ toPerformance = fromPerformance
 
 toSkill :: Msg -> Msg
 toSkill = fromSkill
+
+main = print $ update a a Won
