@@ -1,8 +1,14 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell,OverloadedStrings #-}
 module Main where
 
 import           Control.Lens
 import           Data.Number.Erf
+import qualified Data.Text as T
+import qualified Data.HashMap.Lazy as M
+import           Data.Csv
+import qualified Data.Vector as V
+import           Data.Vector ( (!) )
+import qualified Data.ByteString.Lazy as BL
 
 data Msg = Msg
   { _pi_  :: !Double
@@ -17,17 +23,15 @@ instance Show Msg where
       mu = m^.tau * sigma2
 
 data Player = Player
-  { _identifier :: !String
-  , _skill      :: !Msg
+  { _skill      :: !Msg
   } deriving Show
 makeLenses ''Player
 
 data Result = Won | Lost | Draw
 
-a :: Player
-a = Player
-      { _identifier = "player 1"
-      , _skill      = Msg (1.0 / sigma2) (mu / sigma2)
+defaultPlayer :: Player
+defaultPlayer = Player
+      { _skill      = Msg (1.0 / sigma2) (mu / sigma2)
       }
   where
     mu = 25.0
@@ -91,7 +95,7 @@ fromSkill msg = Msg
     }
   where
     a = 1.0 / (1.0 + c2 * msg^.pi_)
-    c2 = 1
+    c2 = ((25.0 / 3.0) / 2.0) ** 2
 
 weightedPass :: [(Double, Msg)] -> Msg
 weightedPass msgs = Msg
@@ -168,4 +172,27 @@ toPerformance fromPerformanceMsgs msg = go [] fromPerformanceMsgs
 toSkill :: Msg -> Msg
 toSkill = fromSkill
 
-main = print $ update [a] [a] Won
+mangleRow :: M.HashMap String Player -> V.Vector String -> M.HashMap String Player
+mangleRow players row = M.insert player2Name player2 $ M.insert player1Name player1 players
+  where
+    player1Name = row!1
+    player2Name = row!2
+
+    ([player1], [player2]) = update (get player1Name) (get player2Name) result
+
+    result
+      | ((score $ row!3) > (score $ row!4))  = Won
+      | ((score $ row!3) == (score $ row!4)) = Draw
+      | otherwise                            = Lost
+
+    score :: String -> Int
+    score s = read s
+
+    get :: String -> [Player]
+    get p = [M.lookupDefault defaultPlayer p players]
+
+main = do
+    csvData <- BL.getContents
+    case decode NoHeader csvData of
+        Left err -> putStrLn err
+        Right v -> print $ V.foldl' mangleRow M.empty v
