@@ -50,11 +50,10 @@ exclude stateLeft stateRight =
       , _tau = stateLeft^.tau - stateRight^.tau
       }
 
+fuse f (a, b) (c, d) = (f a c, f b d)
+
 update :: [Player] -> [Player] -> Result -> ([Player], [Player])
-update playersLeft playersRight result =
-    ( update (fst treePassPlayers) playersLeft
-    , update (snd treePassPlayers) playersRight
-    )
+update playersLeft playersRight result = fuse update treePassPlayers players
   where
     players = (playersLeft, playersRight)
 
@@ -68,9 +67,7 @@ treePass msgs Lost = swap $ treePass (swap msgs) Won
   where
     swap (a, b) = (b, a)
 treePass msgs result = both %~ (map toSkill) $
-    ( toPerformance (fst skillMsgs) (fst fromDifferenceMsg)
-    , toPerformance (snd skillMsgs) (snd fromDifferenceMsg)
-    )
+    fuse toPerformance skillMsgs fromDifferenceMsg
   where
     fromDifferenceMsg :: (Msg, Msg)
     fromDifferenceMsg = fromDifference performanceMsgs (marginal `exclude` toDifferenceMsg)
@@ -134,7 +131,10 @@ differenceMarginalDraw msg = differenceMarginal vDraw wDraw msg
     vDraw t eps = (normpdf (-eps - t) - normpdf (eps - t)) /
         (normcdf (eps - t) - normcdf (-eps - t))
 
-differenceMarginal :: (Double -> Double -> Double) -> (Double -> Double -> Double) -> Msg -> Msg
+differenceMarginal ::
+  (Double -> Double -> Double)
+  -> (Double -> Double -> Double)
+  -> Msg -> Msg
 differenceMarginal vFun wFun msg = Msg
     { _pi_  = c / wFun_
     , _tau = (d + sqrtC * vFun_) / wFun_
