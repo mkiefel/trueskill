@@ -13,6 +13,7 @@ import           System.Environment ( getArgs )
 import           System.Random.MWC
 import           System.Random.MWC.Distributions
 import           Data.List ( sortBy )
+import           System.IO
 
 data Msg = Msg
   { _pi_  :: !Double
@@ -38,13 +39,17 @@ makeLenses ''Player
 
 data Result = Won | Lost | Draw
 
+defaultMu = 25.0
+defaultSigma = (defaultMu / 3.0)
+defaultSigma2 = defaultSigma**2
+
 defaultPlayer :: Player
 defaultPlayer = Player
       { _skill      = Msg (1.0 / sigma2) (mu / sigma2)
       }
   where
-    mu = 25.0
-    sigma2 = (25.0 / 3.0)**2
+    mu = defaultMu
+    sigma2 = defaultSigma2
 
 m :: Msg
 m = Msg 0 0
@@ -96,6 +101,7 @@ treePass msgs result = both %~ (map toSkill) $
 
     skillMsgs = both %~ (map fromSkill) $ msgs
 
+beta = (defaultSigma / 2.0)
 
 fromSkill :: Msg -> Msg
 fromSkill msg = Msg
@@ -104,8 +110,7 @@ fromSkill msg = Msg
     }
   where
     a = 1.0 / (1.0 + c2 * msg^.pi_)
-    --c2 = ((25.0 / 3.0) / 2.0) ** 2
-    c2 = ((25.0 / 3.0) / 5.0) ** 2
+    c2 = beta ** 2
 
 weightedPass :: [(Double, Msg)] -> Msg
 weightedPass msgs = Msg
@@ -161,7 +166,7 @@ differenceMarginal vFun wFun msg = Msg
     -- ans =
     --
     --     0.2750
-    eps = 0.2750 * (sqrt 2 * ((25.0 / 3.0) / 5.0))
+    eps = 0.2750 * (sqrt 2 * beta)
 
     wFun_ = 1 - wFun (d / sqrtC) (eps * sqrtC)
     vFun_ = vFun (d / sqrtC) (eps * sqrtC)
@@ -210,12 +215,13 @@ mangleRow players row = M.insert player2Name player2 $ M.insert player1Name play
 
 countDraws v = V.length $ V.filter (\row -> row!3 == row!4) v
 
-buildGoalTable model v = sortBy (\(d1, _) (d2, _) -> compare d1 d2)
-    $ V.toList $ V.map (\row -> entry (row!1) (row!2) (row!3) (row!4)) v
+buildGoalTable :: M.HashMap String Player -> V.Vector (V.Vector String) -> [(Double, (Int, Int))]
+buildGoalTable model v = V.toList $ V.map (\row -> entry (row!1) (row!2) (row!3) (row!4)) v
   where
-    entry player1Name player2Name score1 score2 = (mu, score1 ++ "," ++ score2)
+    entry :: String -> String -> String -> String -> (Double, (Int, Int))
+    entry player1Name player2Name score1 score2 = (mu, (read score1, read score2))
       where
-        (mu, _) = toMuSigma2 toDifferenceMsg
+        (mu, sigma2) = toMuSigma2 toDifferenceMsg
 
         toDifferenceMsg = toDifference performanceMsgs
 
@@ -225,12 +231,14 @@ buildGoalTable model v = sortBy (\(d1, _) (d2, _) -> compare d1 d2)
 
         get p = M.lookupDefault defaultPlayer p model
 
-queryRow gen model table row = do
-    sample <- normal mu (sqrt sigma2) gen
-    return $ player1Name ++ "," ++ player2Name ++ ", (" ++ show mu ++ ", " ++ show sigma2 ++ "), " ++ show (bestScore sample)
+queryRow :: M.HashMap String Player -> [(Double, (Int, Int))] -> V.Vector String -> (Int, String, String, Int, Int)
+queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd $ snd best)
+    {-player1Name ++ "," ++ player2Name ++ ", (" ++ show mu ++ ", " ++ show sigma2 ++ "), " ++ show (bestScore mu)-}
   where
     player1Name = row!1
     player2Name = row!2
+
+    best = bestScore mu
 
     bestScore sample = foldl keepBetter (head table) table
       where
@@ -248,6 +256,21 @@ queryRow gen model table row = do
 
     get p = M.lookupDefault defaultPlayer p model
 
+    -- evaluation
+    eval
+        | V.length row < 4 = 0
+        | score1 == score1_ && score2 == score2_ = 4
+        | score1 /= score2 && (score1 - score2) == (score1_ - score2_) = 3
+        | score1 == score2 && (score1 - score2) == (score1_ - score2_) = 2
+        | (score1 > score2 && score1_ > score2_) || (score1 < score2 && score1_ < score2_) = 2
+        | otherwise = 0
+      where
+        score1 = read (row!3)
+        score2 = read (row!4)
+
+        score1_ = fst $ snd best
+        score2_ = snd $ snd best
+
 main = do
     [trainFile,goalFile] <- getArgs
     csvData <- BL.readFile trainFile
@@ -256,19 +279,19 @@ main = do
       Right v -> do
         {-print ((fromIntegral $ countDraws v) / (fromIntegral $ V.length v))-}
         let model = V.foldl' mangleRow M.empty v
-        print model
+        hPutStrLn stderr $ show model
 
         csvData <- BL.readFile goalFile
         case decode NoHeader csvData of
           Left err -> putStrLn err
           Right g -> do
-            let goalTable = buildGoalTable model g :: [(Double, String)]
-            print goalTable
+            let goalTable = buildGoalTable model g
+            {-hPutStrLn stderr $ show goalTable-}
 
             queryData <- BL.getContents
-            results <- withSystemRandom . asGenST $ \gen -> do
-              case decode NoHeader queryData of
-                Left err -> undefined
-                Right q -> V.mapM (queryRow gen model goalTable) q
-            V.mapM_ print results
+            let results = case decode NoHeader queryData of
+                            Left err -> V.empty
+                            Right q -> V.map (queryRow model goalTable) q
+
+            BL.putStr $ encode $ V.toList results
 
