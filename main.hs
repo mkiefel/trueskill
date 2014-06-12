@@ -9,6 +9,10 @@ import           Data.Csv
 import qualified Data.Vector as V
 import           Data.Vector ( (!) )
 import qualified Data.ByteString.Lazy as BL
+import           System.Environment ( getArgs )
+import           System.Random.MWC
+import           System.Random.MWC.Distributions
+import           Data.List ( sortBy )
 
 data Msg = Msg
   { _pi_  :: !Double
@@ -16,11 +20,16 @@ data Msg = Msg
   }
 makeLenses ''Msg
 
+toMuSigma2 :: Msg -> (Double, Double)
+toMuSigma2 msg = (mu, sigma2)
+  where
+    sigma2 = 1.0 / msg^.pi_
+    mu = msg^.tau * sigma2
+
 instance Show Msg where
   show m = "Msg (" ++ show mu ++ ", " ++ show sigma2 ++ ")"
     where
-      sigma2 = 1.0 / m^.pi_
-      mu = m^.tau * sigma2
+      (mu, sigma2) = toMuSigma2 m
 
 data Player = Player
   { _skill      :: !Msg
@@ -95,7 +104,8 @@ fromSkill msg = Msg
     }
   where
     a = 1.0 / (1.0 + c2 * msg^.pi_)
-    c2 = ((25.0 / 3.0) / 2.0) ** 2
+    --c2 = ((25.0 / 3.0) / 2.0) ** 2
+    c2 = ((25.0 / 3.0) / 5.0) ** 2
 
 weightedPass :: [(Double, Msg)] -> Msg
 weightedPass msgs = Msg
@@ -144,7 +154,14 @@ differenceMarginal vFun wFun msg = Msg
     , _tau = (d + sqrtC * vFun_) / wFun_
     }
   where
-    eps = 0.25
+    -- eps set by
+    -- 0.2166588675713617 = 2 * normcdf(eps / (sqrt 2 * ((25.0 / 3.0) / 2.0))) - 1
+    -- >> norminv(1.2166588675713617 / 2)
+    --
+    -- ans =
+    --
+    --     0.2750
+    eps = 0.2750 * (sqrt 2 * ((25.0 / 3.0) / 5.0))
 
     wFun_ = 1 - wFun (d / sqrtC) (eps * sqrtC)
     vFun_ = vFun (d / sqrtC) (eps * sqrtC)
@@ -191,8 +208,67 @@ mangleRow players row = M.insert player2Name player2 $ M.insert player1Name play
     get :: String -> [Player]
     get p = [M.lookupDefault defaultPlayer p players]
 
+countDraws v = V.length $ V.filter (\row -> row!3 == row!4) v
+
+buildGoalTable model v = sortBy (\(d1, _) (d2, _) -> compare d1 d2)
+    $ V.toList $ V.map (\row -> entry (row!1) (row!2) (row!3) (row!4)) v
+  where
+    entry player1Name player2Name score1 score2 = (mu, score1 ++ "," ++ score2)
+      where
+        (mu, _) = toMuSigma2 toDifferenceMsg
+
+        toDifferenceMsg = toDifference performanceMsgs
+
+        performanceMsgs = (both %~ fromPerformance $ skillMsgs)
+
+        skillMsgs = both %~ (map fromSkill) $ ([view skill $ get player1Name], [view skill $ get player2Name])
+
+        get p = M.lookupDefault defaultPlayer p model
+
+queryRow gen model table row = do
+    sample <- normal mu (sqrt sigma2) gen
+    return $ player1Name ++ "," ++ player2Name ++ ", (" ++ show mu ++ ", " ++ show sigma2 ++ "), " ++ show (bestScore sample)
+  where
+    player1Name = row!1
+    player2Name = row!2
+
+    bestScore sample = foldl keepBetter (head table) table
+      where
+        keepBetter t1@(d, s) t2@(d_, s_)
+          | abs (d_ - sample) < abs (d - sample) = t2
+          | otherwise                            = t1
+
+    (mu, sigma2) = toMuSigma2 toDifferenceMsg
+
+    toDifferenceMsg = toDifference performanceMsgs
+
+    performanceMsgs = (both %~ fromPerformance $ skillMsgs)
+
+    skillMsgs = both %~ (map fromSkill) $ ([view skill $ get player1Name], [view skill $ get player2Name])
+
+    get p = M.lookupDefault defaultPlayer p model
+
 main = do
-    csvData <- BL.getContents
+    [trainFile,goalFile] <- getArgs
+    csvData <- BL.readFile trainFile
     case decode NoHeader csvData of
-        Left err -> putStrLn err
-        Right v -> print $ V.foldl' mangleRow M.empty v
+      Left err -> putStrLn err
+      Right v -> do
+        {-print ((fromIntegral $ countDraws v) / (fromIntegral $ V.length v))-}
+        let model = V.foldl' mangleRow M.empty v
+        print model
+
+        csvData <- BL.readFile goalFile
+        case decode NoHeader csvData of
+          Left err -> putStrLn err
+          Right g -> do
+            let goalTable = buildGoalTable model g :: [(Double, String)]
+            print goalTable
+
+            queryData <- BL.getContents
+            results <- withSystemRandom . asGenST $ \gen -> do
+              case decode NoHeader queryData of
+                Left err -> undefined
+                Right q -> V.mapM (queryRow gen model goalTable) q
+            V.mapM_ print results
+
