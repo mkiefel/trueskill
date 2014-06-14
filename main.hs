@@ -231,9 +231,8 @@ buildGoalTable model v = V.toList $ V.map (\row -> entry (row!1) (row!2) (row!3)
 
         get p = M.lookupDefault defaultPlayer p model
 
-queryRow :: M.HashMap String Player -> [(Double, (Int, Int))] -> V.Vector String -> (Int, String, String, Int, Int)
-queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd $ snd best)
-    {-player1Name ++ "," ++ player2Name ++ ", (" ++ show mu ++ ", " ++ show sigma2 ++ "), " ++ show (bestScore mu)-}
+queryRow :: M.HashMap String Player -> [(Double, (Int, Int))] -> V.Vector String -> (Int, String, String, Int, Int, Double)
+queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd $ snd best, mu)
   where
     player1Name = row!1
     player2Name = row!2
@@ -254,7 +253,7 @@ queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd 
 
     skillMsgs = both %~ (map fromSkill) $ ([view skill $ get player1Name], [view skill $ get player2Name])
 
-    get p = M.lookupDefault defaultPlayer p model
+    get p = M.lookupDefault undefined p model
 
     -- evaluation
     eval
@@ -271,6 +270,13 @@ queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd 
         score1_ = fst $ snd best
         score2_ = snd $ snd best
 
+findBestPlayer name player p@(name_, value_)
+  | value_ < value = (name, value)
+  | otherwise      = p
+  where
+    (mu, sigma2) = toMuSigma2 $ (view skill player)
+    value = mu - 3 * sqrt sigma2
+
 main = do
     [trainFile,goalFile] <- getArgs
     csvData <- BL.readFile trainFile
@@ -280,6 +286,9 @@ main = do
         {-print ((fromIntegral $ countDraws v) / (fromIntegral $ V.length v))-}
         let model = V.foldl' mangleRow M.empty v
         hPutStrLn stderr $ show model
+
+        let (best, value) = M.foldrWithKey findBestPlayer ("noland", -100) model
+        putStrLn $ best ++ ": " ++ show value
 
         csvData <- BL.readFile goalFile
         case decode NoHeader csvData of
