@@ -43,7 +43,7 @@ makeLenses ''Player
 data Result = Won | Lost | Draw
 
 defaultMu = 25.0
-defaultSigma = (defaultMu / 3.0)
+defaultSigma = (defaultMu / 5.0)
 defaultSigma2 = defaultSigma**2
 
 defaultPlayer :: Player
@@ -112,7 +112,7 @@ treePass msgs result = both %~ (map toSkill) $
 
     skillMsgs = both %~ (map fromSkill) $ msgs
 
-beta = (defaultSigma / 2.0)
+beta = (defaultSigma / 5.0)
 
 fromSkill :: Msg -> Msg
 fromSkill msg = Msg
