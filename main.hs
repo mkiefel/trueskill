@@ -32,8 +32,11 @@ instance Show Msg where
     where
       (mu, sigma2) = toMuSigma2 m
 
+type GameID = Int
+
 data Player = Player
-  { _skill      :: !Msg
+  { _games :: M.HashMap Int Msg
+  , _skill :: Msg
   } deriving Show
 makeLenses ''Player
 
@@ -45,7 +48,8 @@ defaultSigma2 = defaultSigma**2
 
 defaultPlayer :: Player
 defaultPlayer = Player
-      { _skill      = Msg (1.0 / sigma2) (mu / sigma2)
+      { _skill = Msg (1.0 / sigma2) (mu / sigma2)
+      , _games = M.empty
       }
   where
     mu = defaultMu
@@ -68,24 +72,31 @@ exclude stateLeft stateRight =
       , _tau = stateLeft^.tau - stateRight^.tau
       }
 
-fuse f (a, b) (c, d) = (f a c, f b d)
+fuse3 f (a, a_) (b, b_) (c, c_) = (f a b c, f a_ b_ c_)
+fuse2 f (a, a_) (b, b_) = (f a b, f a_ b_)
 
-update :: [Player] -> [Player] -> Result -> ([Player], [Player])
-update playersLeft playersRight result = fuse update treePassPlayers players
+update :: Int -> [Player] -> [Player] -> Result -> ([Player], [Player])
+update gameID playersLeft playersRight result = fuse3 update sentSkillPlayers treePassPlayers players
   where
     players = (playersLeft, playersRight)
 
-    update :: [Msg] -> [Player] -> [Player]
-    update = zipWith (\m p -> skill %~ (`include` m) $ p)
+    update :: [Msg] -> [Msg] -> [Player] -> [Player]
+    update = zipWith3 (\s m p -> games %~ (M.insert gameID m) $ skill .~ (s `include` m) $ p)
 
-    treePassPlayers = treePass (both %~ (map (view skill)) $ players) result
+    treePassPlayers = treePass sentSkillPlayers result
+
+    sentSkillPlayers = (both %~ (map sentSkill) $ players)
+    sentSkill :: Player -> Msg
+    sentSkill player = view skill player `exclude` (M.lookupDefault emptyMsg gameID $ view games player)
+
+    emptyMsg = Msg { _pi_ = 0, _tau = 0 }
 
 treePass :: ([Msg], [Msg]) -> Result -> ([Msg], [Msg])
 treePass msgs Lost = swap $ treePass (swap msgs) Won
   where
     swap (a, b) = (b, a)
 treePass msgs result = both %~ (map toSkill) $
-    fuse toPerformance skillMsgs fromDifferenceMsg
+    fuse2 toPerformance skillMsgs fromDifferenceMsg
   where
     fromDifferenceMsg :: (Msg, Msg)
     fromDifferenceMsg = fromDifference performanceMsgs (marginal `exclude` toDifferenceMsg)
@@ -199,8 +210,9 @@ mangleRow players row = M.insert player2Name player2 $ M.insert player1Name play
   where
     player1Name = row!1
     player2Name = row!2
+    gameID = read $ row!5
 
-    ([player1], [player2]) = update (get player1Name) (get player2Name) result
+    ([player1], [player2]) = update gameID (get player1Name) (get player2Name) result
 
     result
       | ((score $ row!3) > (score $ row!4))  = Won
@@ -235,8 +247,8 @@ buildGoalTable model v = V.toList $ V.filter checkProper
 
         get p = M.lookupDefault defaultPlayer p model
 
-queryRow :: M.HashMap String Player -> [(Double, (Int, Int))] -> V.Vector String -> (Int, String, String, Int, Int, Double)
-queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd $ snd best, mu)
+queryRow :: M.HashMap String Player -> [(Double, (Int, Int))] -> V.Vector String -> (Int, String, String, Int, Int, Double, Double)
+queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd $ snd best, mu, sigma2)
   where
     player1Name = row!1
     player2Name = row!2
