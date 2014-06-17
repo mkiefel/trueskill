@@ -133,22 +133,31 @@ normpdf x = exp (-x**2 / 2) / sqrt (2 * pi)
 differenceMarginalWon :: Msg -> Msg
 differenceMarginalWon msg = differenceMarginal vWon wWon msg
   where
-    wWon t eps = vWon_ * (vWon_ + t - eps)
+    wWon t eps_ = vWon_ * (vWon_ + t - eps_)
       where
-        vWon_ = vWon t eps
-    vWon t eps = normpdf (t - eps) / normcdf (t - eps)
+        vWon_ = vWon t eps_
+    vWon t eps_ = normpdf (t - eps_) / normcdf (t - eps_)
 
 differenceMarginalDraw :: Msg -> Msg
 differenceMarginalDraw msg = differenceMarginal vDraw wDraw msg
   where
-    wDraw t eps = vDraw_**2 +
-        ((eps - t) * normpdf (eps - t) + (eps + t) * normpdf (eps + t)) /
-        (normcdf (eps - t) - normcdf (-eps - t))
+    wDraw t eps_ = vDraw_**2 +
+        ((eps_ - t) * normpdf (eps_ - t) + (eps_ + t) * normpdf (eps_ + t)) /
+        (normcdf (eps_ - t) - normcdf (-eps_ - t))
       where
-        vDraw_ = vDraw t eps
+        vDraw_ = vDraw t eps_
 
-    vDraw t eps = (normpdf (-eps - t) - normpdf (eps - t)) /
-        (normcdf (eps - t) - normcdf (-eps - t))
+    vDraw t eps_ = (normpdf (-eps_ - t) - normpdf (eps_ - t)) /
+        (normcdf (eps_ - t) - normcdf (-eps_ - t))
+
+-- eps set by
+-- 0.2166588675713617 = 2 * normcdf(eps / (sqrt 2 * ((25.0 / 3.0) / 2.0))) - 1
+-- >> norminv(1.2166588675713617 / 2)
+--
+-- ans =
+--
+--     0.2750
+eps = 0.2750 * (sqrt 2 * beta)
 
 differenceMarginal ::
   (Double -> Double -> Double)
@@ -159,15 +168,6 @@ differenceMarginal vFun wFun msg = Msg
     , _tau = (d + sqrtC * vFun_) / wFun_
     }
   where
-    -- eps set by
-    -- 0.2166588675713617 = 2 * normcdf(eps / (sqrt 2 * ((25.0 / 3.0) / 2.0))) - 1
-    -- >> norminv(1.2166588675713617 / 2)
-    --
-    -- ans =
-    --
-    --     0.2750
-    eps = 0.2750 * (sqrt 2 * beta)
-
     wFun_ = 1 - wFun (d / sqrtC) (eps * sqrtC)
     vFun_ = vFun (d / sqrtC) (eps * sqrtC)
 
@@ -216,8 +216,12 @@ mangleRow players row = M.insert player2Name player2 $ M.insert player1Name play
 countDraws v = V.length $ V.filter (\row -> row!3 == row!4) v
 
 buildGoalTable :: M.HashMap String Player -> V.Vector (V.Vector String) -> [(Double, (Int, Int))]
-buildGoalTable model v = V.toList $ V.map (\row -> entry (row!1) (row!2) (row!3) (row!4)) v
+buildGoalTable model v = V.toList $ V.filter checkProper
+    $ V.map (\row -> entry (row!1) (row!2) (row!3) (row!4)) v
   where
+    checkProper (mu, (score1, score2)) = mu > eps && score1 > score2 ||
+      abs mu < eps && score1 == score2 ||
+      mu < -eps && score1 < score2
     entry :: String -> String -> String -> String -> (Double, (Int, Int))
     entry player1Name player2Name score1 score2 = (mu, (read score1, read score2))
       where
