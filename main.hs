@@ -19,30 +19,41 @@ import           TrueSkill ( predict
                            , Player
                            , Result(..) )
 
+type Model = M.HashMap String Player
+type ScoreLookup = [(Double, (Int, Int))]
 
-mangleRow :: M.HashMap String Player -> V.Vector String -> M.HashMap String Player
-mangleRow players row = M.insert player2Name player2 $ M.insert player1Name player1 players
+
+-- | Take a game (which is in the passed row) and update the beliefs of the skill.
+--
+-- Games might be passed several times, this indirectly implements loopy belief
+-- propagation. It is simply important that the reoccurring games always are
+-- indexed with the same ID.
+updateModel :: Model -> V.Vector String -> Model
+updateModel players row = M.insert player2Name player2 $ M.insert player1Name player1 players
   where
     player1Name = row!1
     player2Name = row!2
     gameID = read $ row!5
+    score = (read $ row!3, read $ row!4)
 
     ([player1], [player2]) = update gameID (get player1Name) (get player2Name) result
 
     result
-      | ((score $ row!3) > (score $ row!4))  = Won
-      | ((score $ row!3) == (score $ row!4)) = Draw
-      | otherwise                            = Lost
+      | ((fst score)  > (snd score)) = Won
+      | ((fst score) == (snd score)) = Draw
+      | otherwise                    = Lost
 
-    score :: String -> Int
-    score s = read s
 
     get :: String -> [Player]
     get p = [M.lookupDefault defaultPlayer p players]
 
 countDraws v = V.length $ V.filter (\row -> row!3 == row!4) v
 
-buildGoalTable :: M.HashMap String Player -> V.Vector (V.Vector String) -> [(Double, (Int, Int))]
+-- | Takes a model a set of training games to build a table of scores.
+--
+-- The score table can be used later to lookup observed results given the mean
+-- difference between to team skills.
+buildGoalTable :: Model -> V.Vector (V.Vector String) -> ScoreLookup
 buildGoalTable model v = V.toList $ V.filter checkProper
     $ V.map (\row -> entry (row!1) (row!2) (row!3) (row!4)) v
   where
@@ -56,39 +67,41 @@ buildGoalTable model v = V.toList $ V.filter checkProper
 
         get p = M.lookupDefault defaultPlayer p model
 
-queryRow :: M.HashMap String Player -> [(Double, (Int, Int))] -> V.Vector String -> (Int, String, String, Int, Int, Double, Double)
-queryRow model table row = (eval, player1Name, player2Name, fst $ snd best, snd $ snd best, mu, sigma2)
+-- | Predict the result of a game given a model and a score table.
+queryRow :: Model
+         -> ScoreLookup
+         -> V.Vector String
+         -> (Int, String, String, Int, Int, Double, Double)
+queryRow model table row =
+    ( 0
+    , player1Name
+    , player2Name
+    , fst $ snd best
+    , snd $ snd best
+    , mu
+    , sigma2)
   where
     player1Name = row!1
     player2Name = row!2
 
     best = bestScore mu
 
-    bestScore sample = foldl keepBetter (head table) table
+    -- | Finds the closest result from the score table with respect to the mean
+    -- of the belief mu.
+    --
+    -- TODO Could be improved with a binary search.
+    bestScore mu = foldl keepBetter (head table) table
       where
         keepBetter t1@(d, s) t2@(d_, s_)
-          | abs (d_ - sample) < abs (d - sample) = t2
-          | otherwise                            = t1
+          | abs (d_ - mu) < abs (d - mu) = t2
+          | otherwise                    = t1
 
     (mu, sigma2) = toMuSigma2 $ predict [get player1Name] [get player2Name]
 
     get p = M.lookupDefault undefined p model
 
-    -- evaluation
-    eval
-        | V.length row < 4 = 0
-        | score1 == score1_ && score2 == score2_ = 4
-        | score1 /= score2 && (score1 - score2) == (score1_ - score2_) = 3
-        | score1 == score2 && (score1 - score2) == (score1_ - score2_) = 2
-        | (score1 > score2 && score1_ > score2_) || (score1 < score2 && score1_ < score2_) = 2
-        | otherwise = 0
-      where
-        score1 = read (row!3)
-        score2 = read (row!4)
-
-        score1_ = fst $ snd best
-        score2_ = snd $ snd best
-
+-- | Find the strongest team with a similar heuristic as in the original
+-- TrueSkill paper.
 findBestPlayer name player p@(name_, value_)
   | value_ < value = (name, value)
   | otherwise      = p
@@ -97,7 +110,7 @@ findBestPlayer name player p@(name_, value_)
     value = mu - 3 * sqrt sigma2
 
 main = do
-    [trainFile,goalFile] <- getArgs
+    [trainFile, goalFile] <- getArgs
     csvData <- BL.readFile trainFile
     case decode NoHeader csvData of
       Left err -> putStrLn err
