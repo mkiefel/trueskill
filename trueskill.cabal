@@ -23,5 +23,7 @@ executable trueskill
                      , bytestring >=0.10 && <0.11
                      , vector >=0.10 && <0.11
                      , cassava >=0.4 && <0.5
+                     , either >=4.3 && <4.4
+                     , transformers >=0.4 && <0.5
   -- hs-source-dirs:
   default-language:    Haskell2010

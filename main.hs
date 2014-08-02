@@ -9,6 +9,8 @@ import qualified Data.ByteString.Lazy as BL
 import           System.Environment ( getArgs )
 import           System.IO ( stderr, hPutStrLn )
 import           Control.Lens ( view )
+import           Control.Monad.Trans.Either ( runEitherT, hoistEither )
+import           Control.Monad.IO.Class ( liftIO )
 
 import           TrueSkill ( predict
                            , update
@@ -33,8 +35,8 @@ updateModel players row = M.insert player2Name player2 $ M.insert player1Name pl
   where
     player1Name = row!1
     player2Name = row!2
-    gameID = read $ row!5
-    score = (read $ row!3, read $ row!4)
+    gameID = read $ row!5 :: Int
+    score = (read $ row!3, read $ row!4) :: (Int, Int)
 
     ([player1], [player2]) = update gameID (get player1Name) (get player2Name) result
 
@@ -111,28 +113,33 @@ findBestPlayer name player p@(name_, value_)
 
 main = do
     [trainFile, goalFile] <- getArgs
-    csvData <- BL.readFile trainFile
-    case decode NoHeader csvData of
-      Left err -> putStrLn err
-      Right v -> do
-        {-print ((fromIntegral $ countDraws v) / (fromIntegral $ V.length v))-}
-        let model = V.foldl' mangleRow M.empty v
-        hPutStrLn stderr $ show model
+    rawTrainData <- BL.readFile trainFile
+    rawGoalData <- BL.readFile goalFile
 
-        let (best, value) = M.foldrWithKey findBestPlayer ("noland", -100) model
-        putStrLn $ best ++ ": " ++ show value
+    rawQueryData <- BL.getContents
 
-        csvData <- BL.readFile goalFile
-        case decode NoHeader csvData of
-          Left err -> putStrLn err
-          Right g -> do
-            let goalTable = buildGoalTable model g
-            {-hPutStrLn stderr $ show goalTable-}
+    results <- runEitherT $ do
+        trainData <- decodeCsv rawTrainData
 
-            queryData <- BL.getContents
-            let results = case decode NoHeader queryData of
-                            Left err -> V.empty
-                            Right q -> V.map (queryRow model goalTable) q
+        let model = V.foldl' updateModel M.empty trainData
+        liftIO $ hPutStrLn stderr $ show model
 
-            BL.putStr $ encode $ V.toList results
+        let (best, value) = M.foldrWithKey
+                              findBestPlayer ("noland", -100) model
+        liftIO $ putStrLn $ best ++ ": " ++ show value
 
+        goalData <- decodeCsv rawGoalData
+        let goalTable = buildGoalTable model goalData
+
+        queryData <- decodeCsv rawQueryData
+
+        return $ V.map (queryRow model goalTable) queryData
+
+    report results
+
+
+  where
+    report (Left err)      = putStrLn err
+    report (Right results) = BL.putStr $ encode $ V.toList results
+
+    decodeCsv = hoistEither . decode NoHeader
