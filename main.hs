@@ -10,7 +10,7 @@ import           System.Environment ( getArgs )
 import           System.IO ( stderr, hPutStrLn )
 import           Control.Lens ( view )
 import           Control.Monad.Trans.Either ( runEitherT, hoistEither )
-import           Control.Monad.IO.Class ( liftIO )
+import           Control.Monad.Trans.Class ( lift )
 
 import           TrueSkill ( predict
                            , update
@@ -122,11 +122,11 @@ main = do
         trainData <- decodeCsv rawTrainData
 
         let model = V.foldl' updateModel M.empty trainData
-        liftIO $ hPutStrLn stderr $ show model
+        lift $ hPutStrLn stderr $ show model
 
         let (best, value) = M.foldrWithKey
                               findBestPlayer ("noland", -100) model
-        liftIO $ putStrLn $ best ++ ": " ++ show value
+        lift $ putStrLn $ best ++ ": " ++ show value
 
         goalData <- decodeCsv rawGoalData
         let goalTable = buildGoalTable model goalData
