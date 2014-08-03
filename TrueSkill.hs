@@ -22,7 +22,7 @@ import qualified Data.HashMap.Lazy as M
 -- Messages are parametrized by the sufficient statistics of a Gaussian
 -- distribution.
 data Msg = Msg
-  { _pi_  :: !Double
+  { _pi_ :: !Double
   , _tau :: !Double
   }
 makeLenses ''Msg
@@ -50,6 +50,7 @@ data Player = Player
 makeLenses ''Player
 
 data Result = Won | Lost | Draw
+  deriving (Show, Eq)
 
 -- | Default player skill mean.
 defaultMu :: Double
@@ -108,6 +109,15 @@ update gameID playersLeft playersRight result =
     sentSkill player = view skill player `exclude` (M.lookupDefault emptyMsg gameID $ view games player)
 
     emptyMsg = Msg { _pi_ = 0, _tau = 0 }
+
+-- | Tansfers final prediction message into a result.
+toResult :: Msg -> Result
+toResult m
+  | mu > eps  = Won
+  | mu < -eps = Lost
+  | otherwise = Draw
+  where
+    (mu, sigma2) = toMuSigma2 m
 
 -- | Calculates the Gaussian belief of a game result.
 predict :: [Player] -> [Player] -> Msg
