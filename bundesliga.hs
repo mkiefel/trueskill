@@ -24,7 +24,7 @@ import           TrueSkill ( predict
                            , Player
                            , Result(..) )
 
-type Model = M.HashMap String Player
+type Model = M.HashMap String (Player Double)
 
 data Game = Game
   { _team1  :: ![String]
@@ -68,10 +68,10 @@ updateModel players game = updatedModel
                     $ zip (game ^. team1 ++ game ^. team2)
                           (updatedTeam1 ++ updatedTeam2)
 
-    put :: Model -> (String, Player) -> Model
+    put :: Model -> (String, Player Double) -> Model
     put m (p, player) = M.insert p player m
 
-    get :: String -> Player
+    get :: String -> Player Double
     get p = M.lookupDefault defaultPlayer p players
 
 findBestPlayer name player p@(name_, value_)
@@ -90,7 +90,7 @@ testModel players games =
     V.map (\g -> toResult $ predict (map get $ g ^. team1)
                                     (map get $ g ^. team2)) games
   where
-    get :: String -> Player
+    get :: String -> Player Double
     get p = M.lookupDefault defaultPlayer p players
 
 main = do

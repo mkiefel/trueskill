@@ -21,7 +21,7 @@ import           TrueSkill ( predict
                            , Player
                            , Result(..) )
 
-type Model = M.HashMap String Player
+type Model = M.HashMap String (Player Double)
 type ScoreLookup = [(Double, (Int, Int))]
 
 
@@ -46,7 +46,7 @@ updateModel players row = M.insert player2Name player2 $ M.insert player1Name pl
       | otherwise                    = Lost
 
 
-    get :: String -> [Player]
+    get :: String -> [Player Double]
     get p = [M.lookupDefault defaultPlayer p players]
 
 countDraws v = V.length $ V.filter (\row -> row!3 == row!4) v
