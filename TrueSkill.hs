@@ -26,6 +26,13 @@ data Msg d = Msg
   }
 makeLenses ''Msg
 
+-- | The model parameters are gathered in this structure.
+data Parameter d = Parameter
+  { _skillSigma   :: !d
+  , _drawMargin   :: !d
+  }
+makeLenses ''Parameter
+
 -- | Translates the sufficient statistics of a message to the more readable
 -- standard parameters for a Gaussian distribution -- mean and variance.
 toMuSigma2 :: Floating a => Msg a -> (a, a)
@@ -51,27 +58,6 @@ makeLenses ''Player
 data Result = Won | Lost | Draw
   deriving (Show, Eq)
 
--- | Default player skill mean.
-defaultMu :: Floating d => d
-defaultMu = 25.0
-
--- | Default player skill standard deviation.
-defaultSigma :: Floating d => d
-defaultSigma = (defaultMu / 5.0)
-
--- | Default player skill variance.
-defaultSigma2 :: Floating d => d
-defaultSigma2 = defaultSigma**2
-
-defaultPlayer :: Floating d => Player d
-defaultPlayer = Player
-      { _skill = Msg (1.0 / sigma2) (mu / sigma2)
-      , _games = M.empty
-      }
-  where
-    mu = defaultMu
-    sigma2 = defaultSigma2
-
 -- | Include a message in a belief.
 include :: Floating d => Msg d -> Msg d -> Msg d
 include stateLeft stateRight =
@@ -95,8 +81,10 @@ fuse3 f (a, a_) (b, b_) (c, c_) = (f a b c, f a_ b_ c_)
 fuse2 f (a, a_) (b, b_) = (f a b, f a_ b_)
 
 -- | Updates the skills of a set of players given a game.
-update :: (Floating d, Ord d) => GameID -> [Player d] -> [Player d] -> Result -> ([Player d], [Player d])
-update gameID playersLeft playersRight result =
+update :: (Floating d, Ord d)
+    => Parameter d -> GameID -> [Player d] -> [Player d] -> Result
+    -> ([Player d], [Player d])
+update parameter gameID playersLeft playersRight result =
     fuse3 update sentSkillPlayers treePassPlayers players
   where
     players = (playersLeft, playersRight)
@@ -104,24 +92,25 @@ update gameID playersLeft playersRight result =
     update :: Floating d => [Msg d] -> [Msg d] -> [Player d] -> [Player d]
     update = zipWith3 (\s m p -> games %~ (M.insert gameID m) $ skill .~ (s `include` m) $ p)
 
-    treePassPlayers = treePass sentSkillPlayers result
+    treePassPlayers = treePass parameter sentSkillPlayers result
 
     sentSkillPlayers = (both %~ (map sentSkill) $ players)
     sentSkill :: Floating d => Player d -> Msg d
     sentSkill player = view skill player `exclude` (M.lookupDefault emptyMsg gameID $ view games player)
 
 -- | Tansfers final prediction message into a result.
-toResult :: (Floating d, Ord d) => Msg d -> Result
-toResult m
+toResult :: (Floating d, Ord d) => Parameter d -> Msg d -> Result
+toResult parameter m
   | mu > eps  = Won
   | mu < -eps = Lost
   | otherwise = Draw
   where
+    eps = parameter^.drawMargin
     (mu, sigma2) = toMuSigma2 m
 
 -- | Tansfers final prediction message into a probabilistic result.
-toResultProbabilities :: (Floating d, Ord d) => Msg d -> (d, d, d)
-toResultProbabilities m = (cdf (-eps), cdf eps - cdf (-eps), 1 - cdf eps)
+toResultProbabilities :: (Floating d, Ord d) => d -> Msg d -> (d, d, d)
+toResultProbabilities eps m = (cdf (-eps), cdf eps - cdf (-eps), 1 - cdf eps)
   where
     (mu, sigma2) = toMuSigma2 m
     sigma = sqrt sigma2
@@ -129,8 +118,8 @@ toResultProbabilities m = (cdf (-eps), cdf eps - cdf (-eps), 1 - cdf eps)
     cdf x = normcdf ((x - mu) / sigma)
 
 -- | Calculates the Gaussian belief of a game result.
-predict :: Floating d => [Player d] -> [Player d] -> Msg d
-predict playersLeft playersRight = toDifferenceMsg
+predict :: Floating d => Parameter d -> [Player d] -> [Player d] -> Msg d
+predict parameter playersLeft playersRight = toDifferenceMsg
   where
     players = (playersLeft, playersRight)
 
@@ -138,38 +127,37 @@ predict playersLeft playersRight = toDifferenceMsg
 
     performanceMsgs = (both %~ fromPerformance $ skillMsgs)
 
-    skillMsgs = both %~ (map fromSkill) $ msgs
+    skillMsgs = both %~ (map (fromSkill $ parameter^.skillSigma)) $ msgs
 
     msgs = (both %~ (map (view skill)) $ players)
 
 -- | A complete message pass down to the observed result variable and back.
-treePass :: (Floating d, Ord d) => ([Msg d], [Msg d]) -> Result -> ([Msg d], [Msg d])
-treePass msgs Lost = swap $ treePass (swap msgs) Won
+treePass :: (Floating d, Ord d)
+    => Parameter d -> ([Msg d], [Msg d]) -> Result
+    -> ([Msg d], [Msg d])
+treePass parameter msgs Lost = swap $ treePass parameter (swap msgs) Won
   where
     swap (a, b) = (b, a)
-treePass msgs result = both %~ (map toSkill) $
-    fuse2 toPerformance skillMsgs fromDifferenceMsg
+treePass parameter msgs result =
+    both %~ (map (toSkill $ parameter^.skillSigma))
+    $ fuse2 toPerformance skillMsgs fromDifferenceMsg
   where
     {-fromDifferenceMsg :: (Msg d, Msg d)-}
     fromDifferenceMsg = fromDifference performanceMsgs (marginal `exclude` toDifferenceMsg)
 
     {-marginal :: Msg d-}
     marginal = case result of
-        Won  -> differenceMarginalWon  toDifferenceMsg
-        Draw -> differenceMarginalDraw toDifferenceMsg
+        Won  -> differenceMarginalWon  (parameter^.drawMargin) toDifferenceMsg
+        Draw -> differenceMarginalDraw (parameter^.drawMargin) toDifferenceMsg
 
     toDifferenceMsg = toDifference performanceMsgs
 
     performanceMsgs = (both %~ fromPerformance $ skillMsgs)
 
-    skillMsgs = both %~ (map fromSkill) $ msgs
+    skillMsgs = both %~ (map (fromSkill $ parameter^.skillSigma)) $ msgs
 
--- | Game skill likelihood variance.
-beta :: Floating d => d
-beta = (defaultSigma / 5.0)
-
-fromSkill :: Floating d => Msg d -> Msg d
-fromSkill msg = Msg
+fromSkill :: Floating d => d -> Msg d -> Msg d
+fromSkill beta msg = Msg
     { _pi_  = a * msg^.pi_
     , _tau = a * msg^.tau
     }
@@ -216,8 +204,8 @@ normpdf x = exp (-x**2 / 2) / sqrt (2 * pi)
 
 -- | EP messages from the observed game result variable given that the first
 -- team won.
-differenceMarginalWon :: (Floating d, Ord d) => Msg d -> Msg d
-differenceMarginalWon msg = differenceMarginal vWon wWon msg
+differenceMarginalWon :: (Floating d, Ord d) => d -> Msg d -> Msg d
+differenceMarginalWon eps msg = differenceMarginal eps vWon wWon msg
   where
     wWon t eps_ = vWon_ * (vWon_ + t - eps_)
       where
@@ -226,8 +214,8 @@ differenceMarginalWon msg = differenceMarginal vWon wWon msg
 
 -- | EP messages from the observed game result variable given that the first
 -- team won.
-differenceMarginalDraw :: (Floating d, Ord d) => Msg d -> Msg d
-differenceMarginalDraw msg = differenceMarginal vDraw wDraw msg
+differenceMarginalDraw :: (Floating d, Ord d) => d -> Msg d -> Msg d
+differenceMarginalDraw eps msg = differenceMarginal eps vDraw wDraw msg
   where
     wDraw t eps_ = vDraw_**2 +
         ((eps_ - t) * normpdf (eps_ - t) + (eps_ + t) * normpdf (eps_ + t)) /
@@ -238,23 +226,11 @@ differenceMarginalDraw msg = differenceMarginal vDraw wDraw msg
     vDraw t eps_ = (normpdf (-eps_ - t) - normpdf (eps_ - t)) /
         (normcdf (eps_ - t) - normcdf (-eps_ - t))
 
--- eps set by
--- 0.2166588675713617 = 2 * normcdf(eps / (sqrt 2 * ((25.0 / 3.0) / 2.0))) - 1
--- >> norminv(1.2166588675713617 / 2)
---
--- ans =
---
---     0.2750
--- | Margin in which a game is considered being a draw. See paper from above
--- for further explanation.
-eps :: Floating d => d
-eps = 0.2750 * (sqrt 2 * beta)
-
 -- | Helper function for EP messages.
-differenceMarginal :: Floating d =>
+differenceMarginal :: Floating d => d ->
   (d -> d -> d) -> (d -> d -> d)
   -> Msg d -> Msg d
-differenceMarginal vFun wFun msg = Msg
+differenceMarginal eps vFun wFun msg = Msg
     { _pi_  = c / wFun_
     , _tau = (d + sqrtC * vFun_) / wFun_
     }
@@ -266,7 +242,6 @@ differenceMarginal vFun wFun msg = Msg
     d = msg^.tau
 
     sqrtC = sqrt c
-
 
 -- | Calculates the messages from the difference random variable back up to the
 -- team variables.
@@ -289,5 +264,5 @@ toPerformance fromPerformanceMsgs msg = go [] fromPerformanceMsgs
     zipM1 msgs = zip (repeat (-1)) msgs
 
 -- | Message for a player skill variable given its corresponding game variable.
-toSkill :: Floating d => Msg d -> Msg d
-toSkill = fromSkill
+toSkill :: Floating d => d -> Msg d -> Msg d
+toSkill beta = fromSkill beta

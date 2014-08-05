@@ -17,11 +17,12 @@ import           Control.Monad.Trans.Class ( lift )
 
 import           TrueSkill ( predict
                            , update
-                           , defaultPlayer
                            , toMuSigma2
                            , toResult
                            , skill
-                           , Player
+                           , Parameter(..)
+                           , Msg(..)
+                           , Player(..)
                            , Result(..) )
 
 type Model = M.HashMap String (Player Double)
@@ -33,6 +34,50 @@ data Game = Game
   , _gameID :: !Int
   }
 makeLenses ''Game
+
+-- | Default player skill mean.
+defaultMu :: Floating d => d
+defaultMu = 25.0
+
+-- | Default player skill standard deviation.
+defaultSigma :: Floating d => d
+defaultSigma = (defaultMu / 5.0)
+
+-- | Default player skill variance.
+defaultSigma2 :: Floating d => d
+defaultSigma2 = defaultSigma**2
+
+defaultPlayer :: Floating d => Player d
+defaultPlayer = Player
+      { _skill = Msg (1.0 / sigma2) (mu / sigma2)
+      , _games = M.empty
+      }
+  where
+    mu = defaultMu
+    sigma2 = defaultSigma2
+
+-- eps set by
+-- 0.2166588675713617 = 2 * normcdf(eps / (sqrt 2 * ((25.0 / 3.0) / 2.0))) - 1
+-- >> norminv(1.2166588675713617 / 2)
+--
+-- ans =
+--
+--     0.2750
+-- | Margin in which a game is considered being a draw. See paper from above
+-- for further explanation.
+eps :: Floating d => d
+eps = 0.2750 * (sqrt 2 * beta)
+
+-- | Game skill likelihood variance.
+beta :: Floating d => d
+beta = (defaultSigma / 5.0)
+
+{-defaultParameter :: Floating d => Parameter d-}
+defaultParameter :: Parameter Double
+defaultParameter = Parameter
+    { _skillSigma = beta
+    , _drawMargin = eps
+    }
 
 -- | Transforms a CSV row into a game.
 parseGame :: V.Vector String -> Game
@@ -58,7 +103,7 @@ parseGame row = Game team1 team2 result gameID
 updateModel :: Model -> Game -> Model
 updateModel players game = updatedModel
   where
-    (updatedTeam1, updatedTeam2) = update
+    (updatedTeam1, updatedTeam2) = update defaultParameter
                                     (game ^. gameID)
                                     (map get $ game ^. team1)
                                     (map get $ game ^. team2)
@@ -87,15 +132,17 @@ trainModel games =
 
 testModel :: Model -> V.Vector Game -> V.Vector Result
 testModel players games =
-    V.map (\g -> toResult $ predict (map get $ g ^. team1)
-                                    (map get $ g ^. team2)) games
+    V.map (\g -> toResult defaultParameter
+                 $ predict defaultParameter (map get $ g ^. team1)
+                                            (map get $ g ^. team2)) games
   where
     get :: String -> Player Double
     get p = M.lookupDefault defaultPlayer p players
 
 main = do
-    [trainFile, testFile] <- getArgs
+    [trainFile, valFile, testFile] <- getArgs
     trainFileData <- BL.readFile trainFile
+    valFileData <- BL.readFile valFile
     testFileData <- BL.readFile testFile
 
     results <- runEitherT $ do

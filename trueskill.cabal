@@ -13,7 +13,7 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable trueskill
-  main-is:             main.hs
+  main-is:             bundesliga.hs
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.6 && <4.7
