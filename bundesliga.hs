@@ -14,18 +14,22 @@ import           Control.Monad.Trans.Either ( EitherT(..)
                                             , runEitherT
                                             , hoistEither )
 import           Control.Monad.Trans.Class ( lift )
+import           Numeric.AD
 
 import           TrueSkill ( predict
                            , update
                            , toMuSigma2
                            , toResult
+                           , toResultProbabilities
                            , skill
                            , Parameter(..)
+                           , skillSigma
+                           , drawMargin
                            , Msg(..)
                            , Player(..)
                            , Result(..) )
 
-type Model = M.HashMap String (Player Double)
+type Model d = M.HashMap String (Player d)
 
 data Game = Game
   { _team1  :: ![String]
@@ -73,10 +77,15 @@ beta :: Floating d => d
 beta = (defaultSigma / 5.0)
 
 {-defaultParameter :: Floating d => Parameter d-}
-defaultParameter :: Parameter Double
+{-defaultParameter = Parameter-}
+    {-{ _skillSigma = beta-}
+    {-, _drawMargin = eps-}
+    {-}-}
+
+defaultParameter :: Floating d => Parameter d
 defaultParameter = Parameter
-    { _skillSigma = beta
-    , _drawMargin = eps
+    { _skillSigma = 5.052192801828535
+    , _drawMargin = 5.094179195149669
     }
 
 -- | Transforms a CSV row into a game.
@@ -100,10 +109,11 @@ parseGame row = Game team1 team2 result gameID
         f c l@(x:xs) | c == delimiter = []:l
                      | otherwise = (c:x):xs
 
-updateModel :: Model -> Game -> Model
-updateModel players game = updatedModel
+updateModel :: (Floating d, Ord d)
+    => Parameter d -> Model d -> Game -> Model d
+updateModel parameter players game = updatedModel
   where
-    (updatedTeam1, updatedTeam2) = update defaultParameter
+    (updatedTeam1, updatedTeam2) = update parameter
                                     (game ^. gameID)
                                     (map get $ game ^. team1)
                                     (map get $ game ^. team2)
@@ -113,10 +123,10 @@ updateModel players game = updatedModel
                     $ zip (game ^. team1 ++ game ^. team2)
                           (updatedTeam1 ++ updatedTeam2)
 
-    put :: Model -> (String, Player Double) -> Model
+    {-put :: Model -> (String, Player Double) -> Model-}
     put m (p, player) = M.insert p player m
 
-    get :: String -> Player Double
+    {-get :: String -> Player Double-}
     get p = M.lookupDefault defaultPlayer p players
 
 findBestPlayer name player p@(name_, value_)
@@ -126,18 +136,48 @@ findBestPlayer name player p@(name_, value_)
     (mu, sigma2) = toMuSigma2 $ (view skill player)
     value = mu - 3 * sqrt sigma2
 
-trainModel :: V.Vector Game -> Model
-trainModel games =
-    V.foldl' updateModel M.empty games
+trainModel :: (Floating d, Ord d)
+    => Parameter d -> V.Vector Game -> Model d
+trainModel parameter games =
+    V.foldl' (updateModel parameter) M.empty games
 
-testModel :: Model -> V.Vector Game -> V.Vector Result
-testModel players games =
-    V.map (\g -> toResult defaultParameter
+testModel :: (Floating d, Ord d)
+    => Parameter d -> Model d -> V.Vector Game -> V.Vector Result
+testModel parameter players games =
+    V.map (\g -> toResult parameter
+                 $ predict parameter (map get $ g ^. team1)
+                                     (map get $ g ^. team2)) games
+  where
+    {-get :: String -> Player Double-}
+    get p = M.lookupDefault defaultPlayer p players
+
+testModelProbability :: (Floating d, Ord d)
+    => Parameter d -> Model d -> V.Vector Game -> V.Vector (d, d, d)
+testModelProbability parameter players games =
+    V.map (\g -> toResultProbabilities parameter
                  $ predict defaultParameter (map get $ g ^. team1)
                                             (map get $ g ^. team2)) games
   where
-    get :: String -> Player Double
+    {-get :: String -> Player Double-}
     get p = M.lookupDefault defaultPlayer p players
+
+
+objective trainData valData [skillSigma, drawMargin] =
+    V.sum $ V.map readout $ V.zip prediction valData
+  where
+    parameter = Parameter
+      { _skillSigma = skillSigma
+      , _drawMargin = drawMargin
+      }
+
+    model = trainModel parameter trainData
+    prediction = testModelProbability parameter model valData
+
+    readout ((lost, draw, won), game) =
+        case (game ^. result) of
+          Won  -> -log won
+          Draw -> -log draw
+          Lost -> -log lost
 
 main = do
     [trainFile, valFile, testFile] <- getArgs
@@ -147,16 +187,28 @@ main = do
 
     results <- runEitherT $ do
         trainData <- decodeCsv trainFileData
+        valData   <- decodeCsv valFileData
 
-        let model = trainModel trainData
-        let (best, value) = M.foldrWithKey
-                              findBestPlayer ("noland", -100) model
+        let ps = take 20 $ gradientDescent (objective trainData valData)
+                    [ defaultParameter^.skillSigma
+                    , defaultParameter^.drawMargin
+                    ]
+        lift $ print ps
 
-        lift $ putStrLn $ best ++ ": " ++ show value
+        let [skillSigma, drawMargin] = last ps
+        let trainedParameter = Parameter
+                                { _skillSigma = skillSigma
+                                , _drawMargin = drawMargin }
+        {-let trainedParameter = defaultParameter-}
 
         testData <- decodeCsv testFileData
+        let model = trainModel trainedParameter trainData :: Model Double
 
-        let prediction = testModel model testData
+        let (best, value) = M.foldrWithKey
+                              findBestPlayer ("noland", -100) model
+        lift $ putStrLn $ best ++ ": " ++ show value
+
+        let prediction = testModel trainedParameter model testData
 
         return $ V.length
                $ V.filter (\(g, p) -> (g ^. result) == p)

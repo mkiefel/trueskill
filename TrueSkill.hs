@@ -101,17 +101,25 @@ update parameter gameID playersLeft playersRight result =
 -- | Tansfers final prediction message into a result.
 toResult :: (Floating d, Ord d) => Parameter d -> Msg d -> Result
 toResult parameter m
-  | mu > eps  = Won
-  | mu < -eps = Lost
-  | otherwise = Draw
+  {-| mu > eps  = Won-}
+  {-| mu < -eps = Lost-}
+  {-| otherwise = Draw-}
+  | won > draw && won > lost  = Won
+  | draw > won && draw > lost = Draw
+  | lost > won && lost > draw = Lost
   where
-    eps = parameter^.drawMargin
-    (mu, sigma2) = toMuSigma2 m
+    {-eps = parameter^.drawMargin-}
+    {-(mu, sigma2) = toMuSigma2 m-}
+
+    (lost, draw, won) = toResultProbabilities parameter m
 
 -- | Tansfers final prediction message into a probabilistic result.
-toResultProbabilities :: (Floating d, Ord d) => d -> Msg d -> (d, d, d)
-toResultProbabilities eps m = (cdf (-eps), cdf eps - cdf (-eps), 1 - cdf eps)
+toResultProbabilities :: (Floating d, Ord d)
+    => Parameter d -> Msg d -> (d, d, d)
+toResultProbabilities parameter m =
+    (cdf (-eps), cdf eps - cdf (-eps), 1 - cdf eps)
   where
+    eps = parameter^.drawMargin
     (mu, sigma2) = toMuSigma2 m
     sigma = sqrt sigma2
 
