@@ -220,10 +220,10 @@ main = do
         let ps = take 20 $ optimizer (objective trainData valData)
                     (grad $ objective trainData valData)
                     [2.4610671085195572,2.7530053800029552,4.875459753758152]
-                    [>[ defaultParameter^.skillSigma<]
-                    [>, defaultParameter^.drawMargin<]
-                    [>, defaultSigma<]
-                    [>] :: [[Double]]<]
+                    {-[>[ defaultParameter^.skillSigma<]-}
+                    {-[>, defaultParameter^.drawMargin<]-}
+                    {-[>, defaultSigma<]-}
+                    {-[>] :: [[Double]]<]-}
         lift $ print ps
 
         let [skillSigma, drawMargin, playerSigma] = last ps
