@@ -14,7 +14,13 @@ import           Control.Monad.Trans.Either ( EitherT(..)
                                             , runEitherT
                                             , hoistEither )
 import           Control.Monad.Trans.Class ( lift )
-import           Numeric.AD
+
+import           Numeric.AD.Mode.Forward
+import           Linear
+import           Optimization.LineSearch
+import           Optimization.LineSearch.BFGS
+
+import           Debug.Trace
 
 import           TrueSkill ( predict
                            , update
@@ -51,14 +57,14 @@ defaultSigma = (defaultMu / 5.0)
 defaultSigma2 :: Floating d => d
 defaultSigma2 = defaultSigma**2
 
-defaultPlayer :: Floating d => Player d
-defaultPlayer = Player
-      { _skill = Msg (1.0 / sigma2) (mu / sigma2)
-      , _games = M.empty
-      }
-  where
-    mu = defaultMu
-    sigma2 = defaultSigma2
+{-defaultPlayer :: Floating d => Player d-}
+{-defaultPlayer = Player-}
+      {-{ _skill = Msg (1.0 / sigma2) (mu / sigma2)-}
+      {-, _games = M.empty-}
+      {-}-}
+  {-where-}
+    {-mu = defaultMu-}
+    {-sigma2 = defaultSigma2-}
 
 -- eps set by
 -- 0.2166588675713617 = 2 * normcdf(eps / (sqrt 2 * ((25.0 / 3.0) / 2.0))) - 1
@@ -76,17 +82,17 @@ eps = 0.2750 * (sqrt 2 * beta)
 beta :: Floating d => d
 beta = (defaultSigma / 5.0)
 
-{-defaultParameter :: Floating d => Parameter d-}
-{-defaultParameter = Parameter-}
-    {-{ _skillSigma = beta-}
-    {-, _drawMargin = eps-}
-    {-}-}
-
 defaultParameter :: Floating d => Parameter d
 defaultParameter = Parameter
-    { _skillSigma = 5.052192801828535
-    , _drawMargin = 5.094179195149669
+    { _skillSigma = beta
+    , _drawMargin = eps
     }
+
+{-defaultParameter :: Floating d => Parameter d-}
+{-defaultParameter = Parameter-}
+    {-{ _skillSigma = 5.052192801828535-}
+    {-, _drawMargin = 5.094179195149669-}
+    {-}-}
 
 -- | Transforms a CSV row into a game.
 parseGame :: V.Vector String -> Game
@@ -110,8 +116,8 @@ parseGame row = Game team1 team2 result gameID
                      | otherwise = (c:x):xs
 
 updateModel :: (Floating d, Ord d)
-    => Parameter d -> Model d -> Game -> Model d
-updateModel parameter players game = updatedModel
+    => Parameter d -> Player d -> Model d -> Game -> Model d
+updateModel parameter defaultPlayer players game = updatedModel
   where
     (updatedTeam1, updatedTeam2) = update parameter
                                     (game ^. gameID)
@@ -137,13 +143,14 @@ findBestPlayer name player p@(name_, value_)
     value = mu - 3 * sqrt sigma2
 
 trainModel :: (Floating d, Ord d)
-    => Parameter d -> V.Vector Game -> Model d
-trainModel parameter games =
-    V.foldl' (updateModel parameter) M.empty games
+    => Parameter d -> Player d -> V.Vector Game -> Model d
+trainModel parameter defaultPlayer games =
+    V.foldl' (updateModel parameter defaultPlayer) M.empty games
 
 testModel :: (Floating d, Ord d)
-    => Parameter d -> Model d -> V.Vector Game -> V.Vector Result
-testModel parameter players games =
+    => Parameter d -> Player d -> Model d -> V.Vector Game
+    -> V.Vector Result
+testModel parameter defaultPlayer players games =
     V.map (\g -> toResult parameter
                  $ predict parameter (map get $ g ^. team1)
                                      (map get $ g ^. team2)) games
@@ -152,8 +159,8 @@ testModel parameter players games =
     get p = M.lookupDefault defaultPlayer p players
 
 testModelProbability :: (Floating d, Ord d)
-    => Parameter d -> Model d -> V.Vector Game -> V.Vector (d, d, d)
-testModelProbability parameter players games =
+    => Parameter d -> Player d -> Model d -> V.Vector Game -> V.Vector (d, d, d)
+testModelProbability parameter defaultPlayer players games =
     V.map (\g -> toResultProbabilities parameter
                  $ predict defaultParameter (map get $ g ^. team1)
                                             (map get $ g ^. team2)) games
@@ -162,7 +169,7 @@ testModelProbability parameter players games =
     get p = M.lookupDefault defaultPlayer p players
 
 
-objective trainData valData [skillSigma, drawMargin] =
+objective trainData valData [skillSigma, drawMargin, playerSigma] =
     V.sum $ V.map readout $ V.zip prediction valData
   where
     parameter = Parameter
@@ -170,14 +177,31 @@ objective trainData valData [skillSigma, drawMargin] =
       , _drawMargin = drawMargin
       }
 
-    model = trainModel parameter trainData
-    prediction = testModelProbability parameter model valData
+    player = Player
+      { _skill = Msg (1 / playerSigma2) (defaultMu / playerSigma2)
+      , _games = M.empty
+      }
+
+    playerSigma2 = playerSigma ** 2
+
+    model = trainModel parameter player trainData
+    prediction = testModelProbability parameter player model valData
 
     readout ((lost, draw, won), game) =
         case (game ^. result) of
           Won  -> -log won
           Draw -> -log draw
           Lost -> -log lost
+
+instance Metric []
+
+optimizer f df init = bfgs search df [[1, 0, 0], [0, 1, 0], [0, 0, 1]] init
+  where
+    search = armijoSearch 0.1 0.2 0.2 wrappedF
+
+    wrappedF x = Debug.Trace.trace (show x ++ ": " ++ show v) v
+      where
+        v = f x
 
 main = do
     [trainFile, valFile, testFile] <- getArgs
@@ -186,29 +210,47 @@ main = do
     testFileData <- BL.readFile testFile
 
     results <- runEitherT $ do
-        trainData <- decodeCsv trainFileData
+        trainSingleData <- decodeCsv trainFileData
         valData   <- decodeCsv valFileData
 
-        let ps = take 20 $ gradientDescent (objective trainData valData)
-                    [ defaultParameter^.skillSigma
-                    , defaultParameter^.drawMargin
-                    ]
+        -- for loopy belief propagation repeat the schedule
+        let trainData = trainSingleData V.++ trainSingleData V.++ trainSingleData
+
+
+        let ps = take 20 $ optimizer (objective trainData valData)
+                    (grad $ objective trainData valData)
+                    [2.4610671085195572,2.7530053800029552,4.875459753758152]
+                    [>[ defaultParameter^.skillSigma<]
+                    [>, defaultParameter^.drawMargin<]
+                    [>, defaultSigma<]
+                    [>] :: [[Double]]<]
         lift $ print ps
 
-        let [skillSigma, drawMargin] = last ps
+        let [skillSigma, drawMargin, playerSigma] = last ps
+        {-let [skillSigma, drawMargin, playerSigma] = [4.618792693710958,3.9896633441188776,2.1175572048484756]-}
+
+        let playerSigma2 = playerSigma ** 2
         let trainedParameter = Parameter
                                 { _skillSigma = skillSigma
                                 , _drawMargin = drawMargin }
+        let trainedPlayer = Player
+                              { _skill = Msg (1 / playerSigma2)
+                                         (defaultMu / playerSigma2)
+                              , _games = M.empty
+                              }
+
         {-let trainedParameter = defaultParameter-}
 
         testData <- decodeCsv testFileData
-        let model = trainModel trainedParameter trainData :: Model Double
+        let model = trainModel trainedParameter trainedPlayer trainData
+                      :: Model Double
 
         let (best, value) = M.foldrWithKey
                               findBestPlayer ("noland", -100) model
         lift $ putStrLn $ best ++ ": " ++ show value
 
-        let prediction = testModel trainedParameter model testData
+        let prediction = testModel trainedParameter trainedPlayer model
+                           testData
 
         return $ V.length
                $ V.filter (\(g, p) -> (g ^. result) == p)
