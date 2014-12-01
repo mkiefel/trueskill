@@ -54,9 +54,9 @@ instance (Show d, Floating d) => Show (Msg d) where
 type GameID = Int
 
 data Player d = Player
-  { _games :: M.HashMap GameID (Msg d) -- ^ Includes all games that were used to infer
-                                    -- the skill.
-  , _skill :: Msg d                 -- ^ Skill of this player.
+  { _games :: M.HashMap GameID (Msg d) -- ^ Includes all games that were used
+                                       -- to infer the skill.
+  , _skill :: Msg d                    -- ^ Skill of this player.
   } deriving Show
 makeLenses ''Player
 
@@ -105,16 +105,10 @@ update parameter gameID playersLeft playersRight result =
 -- | Tansfers final prediction message into a result.
 toResult :: (Floating d, Ord d) => Parameter d -> Msg d -> Result
 toResult parameter m
-  {-| mu > eps  = Won-}
-  {-| mu < -eps = Lost-}
-  {-| otherwise = Draw-}
   | won > draw && won > lost  = Won
   | draw > won && draw > lost = Draw
   | lost > won && lost > draw = Lost
   where
-    {-eps = parameter^.drawMargin-}
-    {-(mu, sigma2) = toMuSigma2 m-}
-
     (lost, draw, won) = toResultProbabilities parameter m
 
 -- | Tansfers final prediction message into a probabilistic result.
@@ -154,10 +148,8 @@ treePass parameter msgs result =
     both %~ (map (toSkill $ parameter^.skillSigma))
     $ fuse2 toPerformance skillMsgs fromDifferenceMsg
   where
-    {-fromDifferenceMsg :: (Msg d, Msg d)-}
     fromDifferenceMsg = fromDifference performanceMsgs (marginal `exclude` toDifferenceMsg)
 
-    {-marginal :: Msg d-}
     marginal = case result of
         Won  -> differenceMarginalWon  (parameter^.drawMargin) toDifferenceMsg
         Draw -> differenceMarginalDraw (parameter^.drawMargin) toDifferenceMsg

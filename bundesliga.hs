@@ -57,15 +57,6 @@ defaultSigma = (defaultMu / 5.0)
 defaultSigma2 :: Floating d => d
 defaultSigma2 = defaultSigma**2
 
-{-defaultPlayer :: Floating d => Player d-}
-{-defaultPlayer = Player-}
-      {-{ _skill = Msg (1.0 / sigma2) (mu / sigma2)-}
-      {-, _games = M.empty-}
-      {-}-}
-  {-where-}
-    {-mu = defaultMu-}
-    {-sigma2 = defaultSigma2-}
-
 -- eps set by
 -- 0.2166588675713617 = 2 * normcdf(eps / (sqrt 2 * ((25.0 / 3.0) / 2.0))) - 1
 -- >> norminv(1.2166588675713617 / 2)
@@ -87,12 +78,6 @@ defaultParameter = Parameter
     { _skillSigma = beta
     , _drawMargin = eps
     }
-
-{-defaultParameter :: Floating d => Parameter d-}
-{-defaultParameter = Parameter-}
-    {-{ _skillSigma = 5.052192801828535-}
-    {-, _drawMargin = 5.094179195149669-}
-    {-}-}
 
 -- | Transforms a CSV row into a game.
 parseGame :: V.Vector String -> Game
