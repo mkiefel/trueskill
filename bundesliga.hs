@@ -129,10 +129,8 @@ updateModel parameter defaultPlayer players game = updatedModel
                     $ zip (game ^. team1 ++ game ^. team2)
                           (updatedTeam1 ++ updatedTeam2)
 
-    {-put :: Model -> (String, Player Double) -> Model-}
     put m (p, player) = M.insert p player m
 
-    {-get :: String -> Player Double-}
     get p = M.lookupDefault defaultPlayer p players
 
 findBestPlayer name player p@(name_, value_)
@@ -155,7 +153,6 @@ testModel parameter defaultPlayer players games =
                  $ predict parameter (map get $ g ^. team1)
                                      (map get $ g ^. team2)) games
   where
-    {-get :: String -> Player Double-}
     get p = M.lookupDefault defaultPlayer p players
 
 testModelProbability :: (Floating d, Ord d)
@@ -165,7 +162,6 @@ testModelProbability parameter defaultPlayer players games =
                  $ predict defaultParameter (map get $ g ^. team1)
                                             (map get $ g ^. team2)) games
   where
-    {-get :: String -> Player Double-}
     get p = M.lookupDefault defaultPlayer p players
 
 

@@ -10,10 +10,12 @@ Portability : portable
 
 See http://machinelearning.wustl.edu/mlpapers/paper_files/NIPS2006_688.pdf
 -}
-module TrueSkill where
+module TrueSkill
+  where
 
 import           Control.Lens
 import qualified Data.HashMap.Lazy as M
+import           Data.Default
 
 -- | Msg represents a parameteric message, which is sent between the random
 -- variables in the factor graph.
@@ -25,6 +27,9 @@ data Msg d = Msg
   , _tau :: !d
   }
 makeLenses ''Msg
+
+instance Floating d => Default (Msg d) where
+  def = Msg { _pi_ = 0.0, _tau = 0.0 }
 
 -- | The model parameters are gathered in this structure.
 data Parameter d = Parameter
@@ -74,9 +79,6 @@ exclude stateLeft stateRight =
       , _tau = stateLeft^.tau - stateRight^.tau
       }
 
-emptyMsg :: Floating d => Msg d
-emptyMsg = Msg { _pi_ = 0, _tau = 0 }
-
 fuse3 f (a, a_) (b, b_) (c, c_) = (f a b c, f a_ b_ c_)
 fuse2 f (a, a_) (b, b_) = (f a b, f a_ b_)
 
@@ -96,7 +98,9 @@ update parameter gameID playersLeft playersRight result =
 
     sentSkillPlayers = (both %~ (map sentSkill) $ players)
     sentSkill :: Floating d => Player d -> Msg d
-    sentSkill player = view skill player `exclude` (M.lookupDefault emptyMsg gameID $ view games player)
+    sentSkill player = view skill player
+                       `exclude`
+                       (M.lookupDefault def gameID $ view games player)
 
 -- | Tansfers final prediction message into a result.
 toResult :: (Floating d, Ord d) => Parameter d -> Msg d -> Result
@@ -239,12 +243,14 @@ differenceMarginal :: Floating d => d ->
   (d -> d -> d) -> (d -> d -> d)
   -> Msg d -> Msg d
 differenceMarginal eps vFun wFun msg = Msg
-    { _pi_  = c / wFun_
-    , _tau = (d + sqrtC * vFun_) / wFun_
+    { _pi_  = c / wFun'
+    , _tau = (d + sqrtC * vFun') / wFun'
     }
   where
-    wFun_ = 1 - wFun (d / sqrtC) (eps * sqrtC)
-    vFun_ = vFun (d / sqrtC) (eps * sqrtC)
+    -- The notation follows the one in the original TrueSkill paper.
+    wFun' = 1 - wFun (d / sqrtC) (eps * sqrtC)
+    vFun' = vFun (d / sqrtC) (eps * sqrtC)
+
 
     c = msg^.pi_
     d = msg^.tau
