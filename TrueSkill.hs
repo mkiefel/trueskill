@@ -8,7 +8,7 @@ module TrueSkill
   , skillSigma
   , drawMargin
   , Parameter(..)
-  , Player(..)
+  , Player
   , Result(..)
   -- Message
   , toMuSigma2
