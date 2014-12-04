@@ -55,7 +55,7 @@ type GameID = Int
 
 data Player d = Player
   { _games :: M.HashMap GameID (Msg d) -- ^ Includes all games that were used
-                                       -- to infer the skill.
+                                       --   to infer the skill.
   , _skill :: Msg d                    -- ^ Skill of this player.
   } deriving Show
 makeLenses ''Player

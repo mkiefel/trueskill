@@ -22,18 +22,18 @@ import           Optimization.LineSearch.BFGS
 
 import           Debug.Trace
 
-import           TrueSkill ( predict
-                           , update
-                           , toMuSigma2
-                           , toResult
-                           , toResultProbabilities
-                           , skill
-                           , Parameter(..)
-                           , skillSigma
-                           , drawMargin
-                           , Msg(..)
-                           , Player(..)
-                           , Result(..) )
+import           TrueSkill.Model ( predict
+                                 , update
+                                 , toMuSigma2
+                                 , toResult
+                                 , toResultProbabilities
+                                 , skill
+                                 , Parameter(..)
+                                 , skillSigma
+                                 , drawMargin
+                                 , Msg(..)
+                                 , Player(..)
+                                 , Result(..) )
 
 type Model d = M.HashMap String (Player d)
 
