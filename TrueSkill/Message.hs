@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-|
-Module      : TrueSkill.Math
+Module      : TrueSkill.Message
 Description : Implements Gaussian messages.
 Copyright   : (c) Martin Kiefel, 2014
 License     : BSD2
