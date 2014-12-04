@@ -22,18 +22,18 @@ import           Optimization.LineSearch.BFGS
 
 import           Debug.Trace
 
-import           TrueSkill.Model ( predict
-                                 , update
-                                 , toMuSigma2
-                                 , toResult
-                                 , toResultProbabilities
-                                 , skill
-                                 , Parameter(..)
-                                 , skillSigma
-                                 , drawMargin
-                                 , Msg(..)
-                                 , Player(..)
-                                 , Result(..) )
+import           TrueSkill ( predict
+                           , update
+                           , toMuSigma2
+                           , toResult
+                           , toResultProbabilities
+                           , skill
+                           , Parameter(..)
+                           , skillSigma
+                           , drawMargin
+                           , Message(..)
+                           , Player(..)
+                           , Result(..) )
 
 type Model d = M.HashMap String (Player d)
 
@@ -159,7 +159,7 @@ objective trainData valData [skillSigma, drawMargin, playerSigma] =
       }
 
     player = Player
-      { _skill = Msg (1 / playerSigma2) (defaultMu / playerSigma2)
+      { _skill = Message (1 / playerSigma2) (defaultMu / playerSigma2)
       , _games = M.empty
       }
 
@@ -215,7 +215,7 @@ main = do
                                 { _skillSigma = skillSigma
                                 , _drawMargin = drawMargin }
         let trainedPlayer = Player
-                              { _skill = Msg (1 / playerSigma2)
+                              { _skill = Message (1 / playerSigma2)
                                          (defaultMu / playerSigma2)
                               , _games = M.empty
                               }
