@@ -30,11 +30,14 @@ makeLenses ''Parameter
 type GameID = Int
 
 data Player d = Player
-  { _games :: M.HashMap GameID (Message d) -- ^ Includes all games that were used
-                                       --   to infer the skill.
+  { _games :: M.HashMap GameID (Message d) -- ^ Includes all games that were
+                                           --   used to infer the skill.
   , _skill :: Message d                    -- ^ Skill of this player.
   } deriving Show
 makeLenses ''Player
+
+instance Floating d => Default (Player d) where
+  def = Player { _games = M.empty, _skill = def }
 
 data Result = Won | Lost | Draw
   deriving (Show, Eq)

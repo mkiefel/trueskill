@@ -3,6 +3,7 @@ module Main where
 
 import qualified Data.HashMap.Lazy as M
 import           Data.Csv ( HasHeader(..), decode, encode )
+import           Data.Default ( def )
 import qualified Data.Vector as V
 import           Data.Vector ( (!) )
 import qualified Data.ByteString.Lazy as BL
@@ -25,14 +26,12 @@ import           Debug.Trace
 import           TrueSkill ( predict
                            , update
                            , toMuSigma2
-                           , toResult
-                           , toResultProbabilities
+                           , fromMuSigma2
                            , skill
                            , Parameter(..)
                            , skillSigma
                            , drawMargin
-                           , Message(..)
-                           , Player(..)
+                           , Player
                            , Result(..) )
 
 type Model d = M.HashMap String (Player d)
@@ -158,10 +157,7 @@ objective trainData valData [skillSigma, drawMargin, playerSigma] =
       , _drawMargin = drawMargin
       }
 
-    player = Player
-      { _skill = Message (1 / playerSigma2) (defaultMu / playerSigma2)
-      , _games = M.empty
-      }
+    player = skill .~ (fromMuSigma2 defaultMu playerSigma2) $ def
 
     playerSigma2 = playerSigma ** 2
 
@@ -214,11 +210,7 @@ main = do
         let trainedParameter = Parameter
                                 { _skillSigma = skillSigma
                                 , _drawMargin = drawMargin }
-        let trainedPlayer = Player
-                              { _skill = Message (1 / playerSigma2)
-                                         (defaultMu / playerSigma2)
-                              , _games = M.empty
-                              }
+        let trainedPlayer = skill .~ fromMuSigma2 defaultMu playerSigma2 $ def
 
         {-let trainedParameter = defaultParameter-}
 

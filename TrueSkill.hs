@@ -12,7 +12,8 @@ module TrueSkill
   , Result(..)
   -- Message
   , toMuSigma2
-  , Message(..)
+  , fromMuSigma2
+  , Message
   )
   where
 
@@ -24,9 +25,10 @@ import           TrueSkill.Model ( predict
                                  , skillSigma
                                  , drawMargin
                                  , Parameter(..)
-                                 , Player(..)
+                                 , Player
                                  , Result(..)
                                  )
 import           TrueSkill.Message ( toMuSigma2
-                                   , Message(..)
+                                   , fromMuSigma2
+                                   , Message
                                    )

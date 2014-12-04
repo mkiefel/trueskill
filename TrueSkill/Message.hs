@@ -28,13 +28,20 @@ makeLenses ''Message
 instance Floating d => Default (Message d) where
   def = Message { _pi_ = 0.0, _tau = 0.0 }
 
--- | Translates the sufficient statistics of a message to the more readable
+-- | Translates the natural parameters of a message to the more readable
 -- standard parameters for a Gaussian distribution -- mean and variance.
-toMuSigma2 :: Floating a => Message a -> (a, a)
+toMuSigma2 :: Floating d => Message d -> (d, d)
 toMuSigma2 msg = (mu, sigma2)
   where
     sigma2 = 1.0 / msg^.pi_
     mu = msg^.tau * sigma2
+
+-- | Translates the standard parameters for a Gaussian distribution
+-- (mean and variance) to the a corresponding message.
+fromMuSigma2 :: Floating d => d -> d -> Message d
+fromMuSigma2 mu sigma2 =
+    Message { _pi_ = 1.0 / sigma2
+            , _tau = mu / sigma2 }
 
 instance (Show d, Floating d) => Show (Message d) where
   show m = "Message (" ++ show mu ++ ", " ++ show sigma2 ++ ")"
