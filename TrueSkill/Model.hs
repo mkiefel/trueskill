@@ -83,7 +83,7 @@ toResultProbabilities parameter m =
     (mu, sigma2) = toMuSigma2 m
     sigma = sqrt sigma2
 
-    cdf x = normcdf ((x - mu) / sigma)
+    cdf x = normCdf ((x - mu) / sigma)
 
 -- | Calculates the Gaussian belief of a game result.
 predict :: Floating d => Parameter d -> [Player d] -> [Player d]
@@ -158,7 +158,7 @@ differenceMarginalWon eps msg = differenceMarginal eps vWon wWon msg
     wWon t eps_ = vWon_ * (vWon_ + t - eps_)
       where
         vWon_ = vWon t eps_
-    vWon t eps_ = normpdf (t - eps_) / normcdf (t - eps_)
+    vWon t eps_ = normPdf (t - eps_) / normCdf (t - eps_)
 
 -- | EP messages from the observed game result variable given that the first
 -- team won.
@@ -166,13 +166,13 @@ differenceMarginalDraw :: (Floating d, Ord d) => d -> Message d -> Message d
 differenceMarginalDraw eps msg = differenceMarginal eps vDraw wDraw msg
   where
     wDraw t eps_ = vDraw_**2 +
-        ((eps_ - t) * normpdf (eps_ - t) + (eps_ + t) * normpdf (eps_ + t)) /
-        (normcdf (eps_ - t) - normcdf (-eps_ - t))
+        ((eps_ - t) * normPdf (eps_ - t) + (eps_ + t) * normPdf (eps_ + t)) /
+        (normCdf (eps_ - t) - normCdf (-eps_ - t))
       where
         vDraw_ = vDraw t eps_
 
-    vDraw t eps_ = (normpdf (-eps_ - t) - normpdf (eps_ - t)) /
-        (normcdf (eps_ - t) - normcdf (-eps_ - t))
+    vDraw t eps_ = (normPdf (-eps_ - t) - normPdf (eps_ - t)) /
+        (normCdf (eps_ - t) - normCdf (-eps_ - t))
 
 -- | Helper function for EP messages.
 differenceMarginal :: Floating d => d ->
