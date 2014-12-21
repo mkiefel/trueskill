@@ -10,122 +10,186 @@ Portability : portable
 
 See http://machinelearning.wustl.edu/mlpapers/paper_files/NIPS2006_688.pdf
 -}
+
 module TrueSkill.Model
   where
 
 import           Control.Lens
-import qualified Data.HashMap.Lazy as M
+import qualified Data.HashMap.Strict as M
 import           Data.Default
+import           Control.DeepSeq
 
 import           TrueSkill.Math
 import           TrueSkill.Message
+import qualified TrueSkill.Poisson as Poisson
+import           Data.List ( foldl' )
+
+import Debug.Trace
 
 -- | The model parameters are gathered in this structure.
 data Parameter d = Parameter
-  { _skillSigma   :: !d
-  , _drawMargin   :: !d
+  { _sigmaOffense :: !d
+  , _sigmaDefense :: !d
   }
 makeLenses ''Parameter
 
 type GameID = Int
 
+data Skills d = Skills
+  { _offense :: Message d
+  , _defense :: Message d
+  } deriving Show
+makeLenses ''Skills
+
+makeSkills offense defense = Skills
+    { _offense = offense
+    , _defense = defense
+    }
+
+instance Floating d => Default (Skills d) where
+    def = Skills { _offense = def
+                 , _defense = def
+                 }
+instance NFData (Skills d) where
+    rnf (Skills o d) = rnf o `seq` rnf d
+
+includeSkills s t = offense %~ (`include` (t^.offense)) $
+                    defense %~ (`include` (t^.defense)) $ s
+
+excludeSkills s t = offense %~ (`exclude` (t^.offense)) $
+                    defense %~ (`exclude` (t^.defense)) $ s
+
 data Player d = Player
-  { _games :: M.HashMap GameID (Message d) -- ^ Includes all games that were
-                                           --   used to infer the skill.
-  , _skill :: Message d                    -- ^ Skill of this player.
+  { _games :: M.HashMap GameID (Skills d) -- ^ Includes all games that were
+                                          --   used to infer the skill.
+  , _skills :: Skills d
   } deriving Show
 makeLenses ''Player
 
 instance Floating d => Default (Player d) where
-  def = Player { _games = M.empty, _skill = def }
+  def = Player { _games = M.empty
+               , _skills = def
+               }
 
-data Result = Won | Lost | Draw
+newtype Result = Result (Int, Int)
   deriving (Show, Eq)
+
+
+instance Floating d => Default (Parameter d) where
+  def = Parameter { _sigmaOffense = 0.1
+                  , _sigmaDefense = 0.1
+                  }
+
+player :: Player Double
+player = skills .~ makeSkills (fromMuSigma2 1 0.1) (fromMuSigma2 0.5 0.1) $ def
 
 fuse3 f (a, a_) (b, b_) (c, c_) = (f a b c, f a_ b_ c_)
 fuse2 f (a, a_) (b, b_) = (f a b, f a_ b_)
 
 -- | Updates the skills of a set of players given a game.
-update :: (Floating d, Ord d)
-    => Parameter d -> GameID -> [Player d] -> [Player d] -> Result
+train :: (Floating d, Ord d)
+    => Parameter d -> GameID -> Result -> ([Player d], [Player d])
     -> ([Player d], [Player d])
-update parameter gameID playersLeft playersRight result =
-    fuse3 update sentSkillPlayers treePassPlayers players
+train parameter gameID result players =
+    fuse3 update sentSkills' recvSkills players
   where
-    players = (playersLeft, playersRight)
-
-    update :: Floating d => [Message d] -> [Message d] -> [Player d]
+    update :: Floating d => [Skills d] -> [Skills d] -> [Player d]
            -> [Player d]
-    update = zipWith3 (\s m p -> games %~ (M.insert gameID m)
-               $ skill .~ (s `include` m) $ p)
+    update = zipWith3 (\s m p -> games %~ M.insert gameID m
+               $ skills .~ (s `includeSkills` m) $ p)
 
-    treePassPlayers = treePass parameter sentSkillPlayers result
+    recvSkills = treePass parameter result sentSkills'
 
-    sentSkillPlayers = (both %~ (map sentSkill) $ players)
-    sentSkill :: Floating d => Player d -> Message d
-    sentSkill player = view skill player
-                       `exclude`
-                       (M.lookupDefault def gameID $ view games player)
+    sentSkills' = both %~ map (sentSkills gameID) $ players
 
--- | Tansfers final prediction message into a result.
-toResult :: (Floating d, Ord d) => Parameter d -> Message d -> Result
-toResult parameter m
-  | won > draw && won > lost  = Won
-  | draw > won && draw > lost = Draw
-  | lost > won && lost > draw = Lost
-  where
-    (lost, draw, won) = toResultProbabilities parameter m
-
--- | Tansfers final prediction message into a probabilistic result.
-toResultProbabilities :: (Floating d, Ord d)
-    => Parameter d -> Message d -> (d, d, d)
-toResultProbabilities parameter m =
-    (cdf (-eps), cdf eps - cdf (-eps), 1 - cdf eps)
-  where
-    eps = parameter^.drawMargin
-    (mu, sigma2) = toMuSigma2 m
-    sigma = sqrt sigma2
-
-    cdf x = normCdf ((x - mu) / sigma)
+    sentSkills gameID player = excludeSkills p g
+      where
+        p = player ^. skills
+        g = M.lookupDefault def gameID (view games player)
 
 -- | Calculates the Gaussian belief of a game result.
-predict :: Floating d => Parameter d -> [Player d] -> [Player d]
-        -> Message d
-predict parameter playersLeft playersRight = toDifferenceMsg
+predict :: Floating d => Parameter d -> ([Player d], [Player d])
+        -> (Message d, Message d)
+predict parameter players = toDifferenceMsgs
   where
-    players = (playersLeft, playersRight)
+    sentSkills' = both.traverse %~ view skills $ players
 
-    toDifferenceMsg = toDifference performanceMsgs
+    performanceMsgs1 = ( performanceMsgs ^. _1 . offense
+                       , performanceMsgs ^. _2 . defense
+                       )
+    performanceMsgs2 = ( performanceMsgs ^. _2 . offense
+                       , performanceMsgs ^. _1 . defense
+                       )
+    toDifferenceMsgs = ( toDifference performanceMsgs1
+                       , toDifference performanceMsgs2
+                       )
 
-    performanceMsgs = (both %~ fromPerformance $ skillMsgs)
+    performanceMsgs =
+        both %~ (\s -> makeSkills
+          (fromPerformance (traverse %~ view offense $ s))
+          (fromPerformance (traverse %~ view defense $ s)))
+        $ skillMsgs
 
-    skillMsgs = both %~ (map (fromSkill $ parameter^.skillSigma)) $ msgs
-
-    msgs = (both %~ (map (view skill)) $ players)
+    skillMsgs = mapSkillMsgs (fromSkill (parameter^.sigmaOffense))
+                             (fromSkill (parameter^.sigmaDefense)) sentSkills'
 
 -- | A complete message pass down to the observed result variable and back.
 treePass :: (Floating d, Ord d)
-    => Parameter d -> ([Message d], [Message d]) -> Result
-    -> ([Message d], [Message d])
-treePass parameter msgs Lost = swap $ treePass parameter (swap msgs) Won
+    => Parameter d -> Result -> ([Skills d], [Skills d])
+    -> ([Skills d], [Skills d])
+treePass parameter (Result result) playerSkills =
+    mapSkillMsgs (toSkill (parameter^.sigmaOffense))
+                 (toSkill (parameter^.sigmaDefense))
+    toPerformanceMsgs
   where
-    swap (a, b) = (b, a)
-treePass parameter msgs result =
-    both %~ (map (toSkill $ parameter^.skillSigma))
-    $ fuse2 toPerformance skillMsgs fromDifferenceMsg
-  where
-    fromDifferenceMsg = fromDifference performanceMsgs
-                          (marginal `exclude` toDifferenceMsg)
+    toPerformanceMsgs =
+        deepseq fromDifferenceMsgs $ fuse2 go skillMsgs fromDifferenceMsgs
+      where
+        go skills fromDifferenceSkills = zipWith makeSkills offenses defenses
+          where
+            mangle s = toPerformance (traverse %~ view s $ skills)
+                         (fromDifferenceSkills ^. s)
 
-    marginal = case result of
-        Won  -> differenceMarginalWon  (parameter^.drawMargin) toDifferenceMsg
-        Draw -> differenceMarginalDraw (parameter^.drawMargin) toDifferenceMsg
+            offenses = mangle offense
+            defenses = mangle defense
 
-    toDifferenceMsg = toDifference performanceMsgs
+    fromDifferenceMsgs =
+        ( makeSkills offense1 defense1
+        , makeSkills offense2 defense2
+        )
+      where
+        (offense1, defense2) = fromDifference (fromResult ^. _1) performanceMsgs1
+        (offense2, defense1) = fromDifference (fromResult ^. _2) performanceMsgs2
 
-    performanceMsgs = (both %~ fromPerformance $ skillMsgs)
+        fromResult = fuse2 exclude marginals toDifferenceMsgs
 
-    skillMsgs = both %~ (map (fromSkill $ parameter^.skillSigma)) $ msgs
+    marginals = deepseq toDifferenceMsgs
+                $ fuse2 Poisson.epMessage result toDifferenceMsgs
+
+    performanceMsgs1 = ( performanceMsgs ^. _1 . offense
+                       , performanceMsgs ^. _2 . defense
+                       )
+    performanceMsgs2 = ( performanceMsgs ^. _2 . offense
+                       , performanceMsgs ^. _1 . defense
+                       )
+    toDifferenceMsgs = ( toDifference performanceMsgs1
+                       , toDifference performanceMsgs2
+                       )
+
+    performanceMsgs =
+        both %~ (\s -> makeSkills
+          (fromPerformance (traverse %~ view offense $ s))
+          (fromPerformance (traverse %~ view defense $ s)))
+        $ skillMsgs
+
+    skillMsgs = mapSkillMsgs (fromSkill (parameter^.sigmaOffense))
+                             (fromSkill (parameter^.sigmaDefense)) playerSkills
+
+mapSkillMsgs fOffense fDefense =
+    both.traverse %~
+    ( (offense %~ fOffense)
+    . (defense %~ fDefense)
+    )
 
 fromSkill :: Floating d => d -> Message d -> Message d
 fromSkill beta msg = Message
@@ -139,11 +203,22 @@ fromSkill beta msg = Message
 -- | Pass of a weighted sum.
 weightedPass :: Floating d => [(d, Message d)] -> Message d
 weightedPass msgs = Message
-    { _pi_  = piNew
-    , _tau = piNew * (sum $ map (\(a, m) -> a * m^.tau / m^.pi_) msgs)
+    { _pi_ = piNew
+    -- , _tau = piNew * sum (map (\(a, m) -> a * m^.tau / m^.pi_) msgs)
+    , _tau = tauNew
     }
   where
-    piNew = 1.0 / (sum $ map (\(a, m) -> a**2 / m^.pi_) msgs)
+    (invPiNew, preTau) = foldl' go (0, 0) msgs
+    go (p, t) (a, m) =
+      p' `seq` t' `seq` (p', t')
+      where
+        p' = p + a**2 / pi_'
+        t' = t + a * tau' / pi_'
+        pi_' = m^.pi_
+        tau' = m^.tau
+
+    piNew = 1.0 / invPiNew
+    tauNew = piNew * preTau 
 
 -- | Calculates the belief of the team skill given player skills.
 fromPerformance :: Floating d => [Message d] -> Message d
@@ -153,54 +228,11 @@ toDifference :: Floating d => (Message d, Message d) -> Message d
 toDifference (performanceLeftMsg, performanceRightMsg) =
     weightedPass [(1, performanceLeftMsg), (-1, performanceRightMsg)]
 
--- | EP messages from the observed game result variable given that the first
--- team won.
-differenceMarginalWon :: (Floating d, Ord d) => d -> Message d -> Message d
-differenceMarginalWon eps msg = differenceMarginal eps vWon wWon msg
-  where
-    wWon t eps_ = vWon_ * (vWon_ + t - eps_)
-      where
-        vWon_ = vWon t eps_
-    vWon t eps_ = normPdf (t - eps_) / normCdf (t - eps_)
-
--- | EP messages from the observed game result variable given that the first
--- team won.
-differenceMarginalDraw :: (Floating d, Ord d) => d -> Message d -> Message d
-differenceMarginalDraw eps msg = differenceMarginal eps vDraw wDraw msg
-  where
-    wDraw t eps_ = vDraw_**2 +
-        ((eps_ - t) * normPdf (eps_ - t) + (eps_ + t) * normPdf (eps_ + t)) /
-        (normCdf (eps_ - t) - normCdf (-eps_ - t))
-      where
-        vDraw_ = vDraw t eps_
-
-    vDraw t eps_ = (normPdf (-eps_ - t) - normPdf (eps_ - t)) /
-        (normCdf (eps_ - t) - normCdf (-eps_ - t))
-
--- | Helper function for EP messages.
-differenceMarginal :: Floating d => d ->
-  (d -> d -> d) -> (d -> d -> d)
-  -> Message d -> Message d
-differenceMarginal eps vFun wFun msg = Message
-    { _pi_  = c / wFun'
-    , _tau = (d + sqrtC * vFun') / wFun'
-    }
-  where
-    -- The notation follows the one in the original TrueSkill paper.
-    wFun' = 1 - wFun (d / sqrtC) (eps * sqrtC)
-    vFun' = vFun (d / sqrtC) (eps * sqrtC)
-
-
-    c = msg^.pi_
-    d = msg^.tau
-
-    sqrtC = sqrt c
-
 -- | Calculates the messages from the difference random variable back up to the
 -- team variables.
-fromDifference :: Floating d => (Message d, Message d) -> Message d
+fromDifference :: Floating d => Message d -> (Message d, Message d)
                -> (Message d, Message d)
-fromDifference (performanceLeftMsg, performanceRightMsg) toDifferenceFactorMsg =
+fromDifference toDifferenceFactorMsg (performanceLeftMsg, performanceRightMsg) =
     ( weightedPass [(1, performanceRightMsg), (1, toDifferenceFactorMsg)]
     , weightedPass [(1, performanceLeftMsg), (-1, toDifferenceFactorMsg)]
     )
@@ -213,8 +245,8 @@ toPerformance fromPerformanceMsgs msg = go [] fromPerformanceMsgs
   where
     go _ []                    = []
     go headMsgs (m : tailMsgs) = weightedPass ((1, msg)
-                                 : (zipM1 headMsgs)
-                                 ++ (zipM1 tailMsgs))
+                                 : zipM1 headMsgs
+                                 ++ zipM1 tailMsgs)
         : go (m : headMsgs) tailMsgs
 
     zipM1 msgs = zip (repeat (-1)) msgs
