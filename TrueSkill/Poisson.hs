@@ -27,12 +27,12 @@ import           TrueSkill.Math ( choose
 --
 -- The Gaussian message is defined to be
 integral :: (Floating d, Ord d) => Int -> d -> d -> d
-integral k pi_ tau =
+integral k pi_' tau' =
     sum [fromIntegral (choose k i)
-         * (tau - 1) ** fromIntegral (k - i)
-         * pi_ ** (0.5 * fromIntegral (-2*k + i - 1))
-         * monomialGauss i (-(tau - 1) / sqrt pi_) 20
-         | i <- [0 .. k]]
+         * (tau' - 1) ^ (k - i)
+         / sqrt pi_' ^ (2*k - i + 1)
+         * monomialGauss i (-(tau' - 1) / sqrt pi_') 20
+        | i <- [0 .. k]]
 
 predictionMessage :: (Floating d, Ord d) => Message d -> [d]
 predictionMessage message = map ( / partition ) distribution
@@ -40,7 +40,8 @@ predictionMessage message = map ( / partition ) distribution
     pi_' = message ^. pi_
     tau' = message ^. tau
 
-    distribution = take 10 [ integral k pi_' tau' / fromIntegral (fac k) | k <- [0..] ]
+    distribution = take 10 [ integral k pi_' tau' / fromIntegral (fac k)
+                           | k <- [0..] ]
     partition = sum distribution
 
 -- | Approximates the state distribution of a variable including the incoming
@@ -59,7 +60,7 @@ epMessage k message =
         expectedX2 = integral (k+2) pi_' tau' / partition
 
         mu = expectedX
-        sigma2 = expectedX2 - expectedX**2
+        sigma2 = expectedX2 - expectedX^(2 :: Int)
 
         -- Map the expected sufficient statistics back to natural parameters.
         newPi_ = 1 / sigma2

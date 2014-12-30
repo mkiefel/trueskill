@@ -18,13 +18,11 @@ import           Control.Lens
 import qualified Data.HashMap.Strict as M
 import           Data.Default
 import           Control.DeepSeq
-
-import           TrueSkill.Math
-import           TrueSkill.Message
-import qualified TrueSkill.Poisson as Poisson
 import           Data.List ( foldl' )
 
-import Debug.Trace
+import           TrueSkill.Message
+import qualified TrueSkill.Poisson as Poisson
+
 
 -- | The model parameters are gathered in this structure.
 data Parameter d = Parameter
@@ -41,9 +39,10 @@ data Skills d = Skills
   } deriving Show
 makeLenses ''Skills
 
-makeSkills offense defense = Skills
-    { _offense = offense
-    , _defense = defense
+makeSkills :: Message d -> Message d -> Skills d
+makeSkills offense' defense' = Skills
+    { _offense = offense'
+    , _defense = defense'
     }
 
 instance Floating d => Default (Skills d) where
@@ -53,9 +52,11 @@ instance Floating d => Default (Skills d) where
 instance NFData (Skills d) where
     rnf (Skills o d) = rnf o `seq` rnf d
 
+includeSkills :: Floating d => Skills d -> Skills d -> Skills d
 includeSkills s t = offense %~ (`include` (t^.offense)) $
                     defense %~ (`include` (t^.defense)) $ s
 
+excludeSkills :: Floating d => Skills d -> Skills d -> Skills d
 excludeSkills s t = offense %~ (`exclude` (t^.offense)) $
                     defense %~ (`exclude` (t^.defense)) $ s
 
@@ -80,10 +81,11 @@ instance Floating d => Default (Parameter d) where
                   , _sigmaDefense = 0.1
                   }
 
-player :: Player Double
-player = skills .~ makeSkills (fromMuSigma2 1 0.1) (fromMuSigma2 0.5 0.1) $ def
-
+fuse3 :: (t1 -> t2 -> t3 -> s) -> (t1, t1) -> (t2, t2) -> (t3, t3)
+      -> (s, s)
 fuse3 f (a, a_) (b, b_) (c, c_) = (f a b c, f a_ b_ c_)
+
+fuse2 :: (t1 -> t2 -> s) -> (t1, t1) -> (t2, t2) -> (s, s)
 fuse2 f (a, a_) (b, b_) = (f a b, f a_ b_)
 
 -- | Updates the skills of a set of players given a game.
@@ -100,9 +102,9 @@ train parameter gameID result players =
 
     recvSkills = treePass parameter result sentSkills'
 
-    sentSkills' = both %~ map (sentSkills gameID) $ players
+    sentSkills' = both %~ map sentSkills $ players
 
-    sentSkills gameID player = excludeSkills p g
+    sentSkills player = excludeSkills p g
       where
         p = player ^. skills
         g = M.lookupDefault def gameID (view games player)
@@ -145,9 +147,9 @@ treePass parameter (Result result) playerSkills =
     toPerformanceMsgs =
         deepseq fromDifferenceMsgs $ fuse2 go skillMsgs fromDifferenceMsgs
       where
-        go skills fromDifferenceSkills = zipWith makeSkills offenses defenses
+        go skills' fromDifferenceSkills = zipWith makeSkills offenses defenses
           where
-            mangle s = toPerformance (traverse %~ view s $ skills)
+            mangle s = toPerformance (traverse %~ view s $ skills')
                          (fromDifferenceSkills ^. s)
 
             offenses = mangle offense
@@ -185,6 +187,10 @@ treePass parameter (Result result) playerSkills =
     skillMsgs = mapSkillMsgs (fromSkill (parameter^.sigmaOffense))
                              (fromSkill (parameter^.sigmaDefense)) playerSkills
 
+mapSkillMsgs :: (Message d -> Message d)
+             -> (Message d -> Message d)
+             -> ([Skills d], [Skills d])
+             -> ([Skills d], [Skills d])
 mapSkillMsgs fOffense fDefense =
     both.traverse %~
     ( (offense %~ fOffense)
@@ -198,13 +204,12 @@ fromSkill beta msg = Message
     }
   where
     a = 1.0 / (1.0 + c2 * msg^.pi_)
-    c2 = beta ** 2
+    c2 = beta ^ (2 :: Int)
 
 -- | Pass of a weighted sum.
 weightedPass :: Floating d => [(d, Message d)] -> Message d
 weightedPass msgs = Message
     { _pi_ = piNew
-    -- , _tau = piNew * sum (map (\(a, m) -> a * m^.tau / m^.pi_) msgs)
     , _tau = tauNew
     }
   where
@@ -212,13 +217,13 @@ weightedPass msgs = Message
     go (p, t) (a, m) =
       p' `seq` t' `seq` (p', t')
       where
-        p' = p + a**2 / pi_'
+        p' = p + a^(2 :: Int) / pi_'
         t' = t + a * tau' / pi_'
         pi_' = m^.pi_
         tau' = m^.tau
 
     piNew = 1.0 / invPiNew
-    tauNew = piNew * preTau 
+    tauNew = piNew * preTau
 
 -- | Calculates the belief of the team skill given player skills.
 fromPerformance :: Floating d => [Message d] -> Message d

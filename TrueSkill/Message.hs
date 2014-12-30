@@ -31,7 +31,7 @@ instance Floating d => Default (Message d) where
     def = Message { _pi_ = 0.0, _tau = 0.0 }
 
 instance NFData (Message d) where
-    rnf (Message pi_ tau) = pi_ `seq` tau `seq` ()
+    rnf (Message pi_' tau') = pi_' `seq` tau' `seq` ()
 
 -- | Translates the natural parameters of a message to the more readable
 -- standard parameters for a Gaussian distribution -- mean and variance.
