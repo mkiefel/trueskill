@@ -12,10 +12,8 @@ build-type:          Simple
 -- extra-source-files:
 cabal-version:       >=1.10
 
-executable trueskill
-  main-is:             bundesliga.hs
-  -- other-modules:
-  -- other-extensions:
+executable bench
+  main-is:             bench.hs
   build-depends:       base >=4.6 && <4.7
                      , lens
                      , unordered-containers >=0.2 && <0.3
@@ -29,6 +27,49 @@ executable trueskill
                      , data-default
                      , deepseq
                      , criterion
+  -- hs-source-dirs:
+  default-language:    Haskell2010
+
+  ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
+                       -funbox-strict-fields
+
+test-suite test_autodiff
+  main-is:             TrueSkill/Test/Autodiff.hs
+  Type:                exitcode-stdio-1.0
+  build-depends:       base >=4.6 && <4.7
+                     , lens
+                     , linear
+                     , test-framework
+                     , test-framework-quickcheck2
                      , QuickCheck
   -- hs-source-dirs:
   default-language:    Haskell2010
+
+  ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
+                       -funbox-strict-fields
+
+
+-- executable bundesliga
+--   main-is:             bundesliga.hs
+--   build-depends:       base >=4.6 && <4.7
+--                      , lens
+--                      , unordered-containers >=0.2 && <0.3
+--                      , bytestring >=0.10 && <0.11
+--                      , vector >=0.10 && <0.11
+--                      , cassava >=0.4 && <0.5
+--                      , either >=4.3 && <4.4
+--                      , transformers
+--                      , linear
+--                      , optimization
+--                      , data-default
+--                      , deepseq
+--                      , criterion
+--                      , QuickCheck
+--   -- hs-source-dirs:
+--   default-language:    Haskell2010
+
+--   -- Activate this for profiling.
+--   -- ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
+--   --                      -funbox-strict-fields -rtsopts -auto-all -caf-all
+--   ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
+--                        -funbox-strict-fields

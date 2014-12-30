@@ -1,10 +1,11 @@
-{-# LANGUAGE RankNTypes, TemplateHaskell #-}
-module TrueSkill.Test.Autodiff where
+{-# LANGUAGE RankNTypes #-}
+module Main where
 
 import Linear.V2
 import Control.Lens
 
-import Test.QuickCheck
+import Test.Framework as TF (defaultMain, testGroup, Test)
+import Test.Framework.Providers.QuickCheck2 (testProperty)
 
 import TrueSkill.Autodiff
 
@@ -76,6 +77,23 @@ prop_numSqrt = testStdNumerical (\x _ -> sqrt x)
 prop_numLog :: GradientCheck
 prop_numLog = testStdNumerical (\x _ -> log x)
 
-return []
-runTests :: IO Bool
-runTests = $quickCheckAll
+main :: IO ()
+main = defaultMain tests
+
+tests :: [TF.Test]
+tests = [ testGroup "exact gradient"
+          [ testProperty "add" prop_add
+          , testProperty "mul" prop_mul
+          , testProperty "sub" prop_sub
+          ]
+        , testGroup "numerical gradient"
+          [ testProperty "add" prop_numAdd
+          , testProperty "mul" prop_numMul
+          , testProperty "sub" prop_numSub
+          , testProperty "negate" prop_numNegate
+          , testProperty "div" prop_numDiv
+          , testProperty "exp" prop_numExp
+          , testProperty "sqrt" prop_numSqrt
+          , testProperty "log" prop_numLog
+          ]
+        ]
