@@ -30,7 +30,11 @@ choose n k = choose (n-1) (k-1) * n `div` k
 erf :: (Floating d, Ord d) => d -> d
 erf x
     | x < 0     = -erf(-x)
-    | otherwise = 1 - 1 / (1 + a1*x + a2*x^2 + a3*x^3 + a4*x^4)^4
+    | otherwise = 1 - 1 / (1 +
+                           a1*x +
+                           a2*x^(2 :: Int) +
+                           a3*x^(3 :: Int) +
+                           a4*x^(4 :: Int))^(4 :: Int)
   where
     a1 = 0.278393
     a2 = 0.230389
@@ -43,7 +47,7 @@ normCdf x = 0.5 * (1 + erf (x / sqrt 2))
 
 -- | Probability density function of a normal Gaussian distribution.
 normPdf :: Floating d => d -> d
-normPdf x = exp (-x^2 / 2) / sqrt (2 * pi)
+normPdf x = exp (-x^(2 :: Int) / 2) / sqrt (2 * pi)
 
 -- | Faculty.
 fac :: Int -> Int
@@ -57,7 +61,7 @@ doubleFac n = product [n - 2*i | i <- [0 .. (n + 1) `div` 2 - 1]]
 
 -- | Non-normalized normal.
 gauss :: Floating d => d -> d
-gauss x = exp (-0.5 * x^2)
+gauss x = exp (-0.5 * x^(2 :: Int))
 
 -- | Integral primitiv for \int \gauss(x) \dx.
 normPrimitive :: (Floating d, Ord d) => d -> d
@@ -76,16 +80,16 @@ oddPrimitive :: Floating d => Int -> d -> d
 oddPrimitive i x =
     -gauss x
     * sum [fromIntegral (doubleFac (2 * i))
-        / fromIntegral (doubleFac (2 * j)) * x ^ (2 * fromIntegral j)
-        | j <- [0 .. i]]
+           / fromIntegral (doubleFac (2 * j)) * x ^ (2 * j)
+          | j <- [0 .. i]]
 
 -- | Integral primitiv for \int x^{2*i+2} \gauss(x) \dx.
 evenPrimitive :: (Floating d, Ord d) => Int -> d -> d
 evenPrimitive i x =
     -gauss x
     * sum [fromIntegral (doubleFac (2 * i + 1))
-        / fromIntegral (doubleFac (2 * j + 1)) * x ^ (2 * fromIntegral j + 1)
-        | j <- [0 .. i]]
+           / fromIntegral (doubleFac (2 * j + 1)) * x ^ (2 * j + 1)
+          | j <- [0 .. i]]
     + fromIntegral (doubleFac (2 * i + 1)) * normCdf x * sqrt(2*pi)
 
 -- | Convenience functions for integrals of monomials and Gaussians.

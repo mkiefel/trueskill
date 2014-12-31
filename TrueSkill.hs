@@ -40,7 +40,6 @@ import           TrueSkill.Model ( predict
                                  , makeSkills
                                  , Parameter(..)
                                  , Player
-                                 , Skills
                                  , Result(..)
                                  )
 import           TrueSkill.Message ( toMuSigma2
