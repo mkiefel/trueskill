@@ -49,27 +49,28 @@ test-suite test_autodiff
                        -funbox-strict-fields
 
 
--- executable bundesliga
---   main-is:             bundesliga.hs
---   build-depends:       base >=4.6 && <4.7
---                      , lens
---                      , unordered-containers >=0.2 && <0.3
---                      , bytestring >=0.10 && <0.11
---                      , vector >=0.10 && <0.11
---                      , cassava >=0.4 && <0.5
---                      , either >=4.3 && <4.4
---                      , transformers
---                      , linear
---                      , optimization
---                      , data-default
---                      , deepseq
---                      , criterion
---                      , QuickCheck
---   -- hs-source-dirs:
---   default-language:    Haskell2010
+executable bundesliga
+  main-is:             bundesliga.hs
+  build-depends:       base >=4.6 && <4.7
+                     , lens
+                     , unordered-containers >=0.2 && <0.3
+                     , bytestring >=0.10 && <0.11
+                     , vector >=0.10 && <0.11
+                     , cassava >=0.4 && <0.5
+                     , either >=4.3 && <4.4
+                     , transformers
+                     , linear
+                     , optimization
+                     , data-default
+                     , deepseq
+                     , criterion
+                     , QuickCheck
+                     , parallel
+  -- hs-source-dirs:
+  default-language:    Haskell2010
 
---   -- Activate this for profiling.
---   -- ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
---   --                      -funbox-strict-fields -rtsopts -auto-all -caf-all
---   ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
---                        -funbox-strict-fields
+  -- Activate this for profiling.
+  -- ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
+  --                      -funbox-strict-fields -rtsopts -auto-all -caf-all
+  ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
+                       -funbox-strict-fields -threaded
