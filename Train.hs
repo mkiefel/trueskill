@@ -55,7 +55,7 @@ objective trainData valData [ sigmaOffense
                             , muDefense
                             , sigmaDefense2
                             ] =
-    V.sum $ V.map loss valData
+    V.sum (V.map loss valData) / fromIntegral (V.length valData)
   where
     parameter = Parameter
       { _sigmaOffense = sigmaOffense
