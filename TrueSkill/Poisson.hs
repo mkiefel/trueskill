@@ -19,6 +19,8 @@ import           TrueSkill.Math ( choose
                                 , monomialGauss
                                 , fac
                                 )
+import           TrueSkill.Autodiff
+
 -- | Implements the integral of
 -- \int x^k \exp (-0.5 \pi (x - (\tau - 1)/\pi)^2) \dx
 -- for any k (the observation of the Poisson distribution)
@@ -33,6 +35,8 @@ integral k pi_' tau' =
          / sqrt pi_' ^ (2*k - i + 1)
          * monomialGauss i (-(tau' - 1) / sqrt pi_') 20
         | i <- [0 .. k]]
+{-# SPECIALISE integral :: Int -> Double -> Double -> Double #-}
+{-# SPECIALISE integral :: Int -> AD -> AD -> AD #-}
 
 predictionMessage :: (Floating d, Ord d) => Message d -> [d]
 predictionMessage message = map ( / partition ) distribution
@@ -43,6 +47,8 @@ predictionMessage message = map ( / partition ) distribution
     distribution = take 10 [ integral k pi_' tau' / fromIntegral (fac k)
                            | k <- [0..] ]
     partition = sum distribution
+{-# SPECIALISE predictionMessage :: Message Double -> [Double] #-}
+{-# SPECIALISE predictionMessage :: Message AD -> [AD] #-}
 
 -- | Approximates the state distribution of a variable including the incoming
 -- Gaussian message and the observation of a Poisson factor attached to it.
@@ -65,3 +71,5 @@ epMessage k message =
         -- Map the expected sufficient statistics back to natural parameters.
         newPi_ = 1 / sigma2
         newTau = mu / sigma2
+{-# SPECIALISE epMessage :: Int -> Message Double -> Message Double #-}
+{-# SPECIALISE epMessage :: Int -> Message AD -> Message AD #-}

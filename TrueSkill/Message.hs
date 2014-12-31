@@ -15,6 +15,8 @@ import           Control.Lens
 import           Data.Default
 import           Control.DeepSeq
 
+import           TrueSkill.Autodiff
+
 -- | Message represents a parameteric message, which is sent between the random
 -- variables in the factor graph.
 --
@@ -40,6 +42,8 @@ toMuSigma2 msg = (mu, sigma2)
   where
     sigma2 = 1.0 / msg^.pi_
     mu = msg^.tau * sigma2
+{-# SPECIALISE toMuSigma2 :: Message Double -> (Double, Double) #-}
+{-# SPECIALISE toMuSigma2 :: Message AD -> (AD, AD) #-}
 
 -- | Translates the standard parameters for a Gaussian distribution
 -- (mean and variance) to the a corresponding message.
@@ -47,6 +51,8 @@ fromMuSigma2 :: Floating d => d -> d -> Message d
 fromMuSigma2 mu sigma2 =
     Message { _pi_ = 1.0 / sigma2
             , _tau = mu / sigma2 }
+{-# SPECIALISE fromMuSigma2 :: Double -> Double -> Message Double #-}
+{-# SPECIALISE fromMuSigma2 :: AD -> AD -> Message AD #-}
 
 instance (Show d, Floating d) => Show (Message d) where
   show m = "Message (" ++ show mu ++ ", " ++ show sigma2 ++ ")"
@@ -60,6 +66,10 @@ include stateLeft stateRight =
       { _pi_  = stateLeft^.pi_ + stateRight^.pi_
       , _tau = stateLeft^.tau + stateRight^.tau
       }
+{-# SPECIALISE include :: Message Double -> Message Double
+                       -> Message Double #-}
+{-# SPECIALISE include :: Message AD -> Message AD
+                       -> Message AD #-}
 
 -- | Remove a message from a belief.
 exclude :: Floating d => Message d -> Message d -> Message d
@@ -68,4 +78,7 @@ exclude stateLeft stateRight =
       { _pi_ = stateLeft^.pi_ - stateRight^.pi_
       , _tau = stateLeft^.tau - stateRight^.tau
       }
-
+{-# SPECIALISE exclude :: Message Double -> Message Double
+                       -> Message Double #-}
+{-# SPECIALISE exclude :: Message AD -> Message AD
+                       -> Message AD #-}

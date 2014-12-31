@@ -22,6 +22,7 @@ import           Data.List ( foldl' )
 
 import           TrueSkill.Message
 import qualified TrueSkill.Poisson as Poisson
+import           TrueSkill.Autodiff
 
 
 -- | The model parameters are gathered in this structure.
@@ -55,10 +56,18 @@ instance NFData (Skills d) where
 includeSkills :: Floating d => Skills d -> Skills d -> Skills d
 includeSkills s t = offense %~ (`include` (t^.offense)) $
                     defense %~ (`include` (t^.defense)) $ s
+{-# SPECIALISE includeSkills :: Skills Double -> Skills Double
+                             -> Skills Double #-}
+{-# SPECIALISE includeSkills :: Skills AD -> Skills AD
+                             -> Skills AD #-}
 
 excludeSkills :: Floating d => Skills d -> Skills d -> Skills d
 excludeSkills s t = offense %~ (`exclude` (t^.offense)) $
                     defense %~ (`exclude` (t^.defense)) $ s
+{-# SPECIALISE excludeSkills :: Skills Double -> Skills Double
+                             -> Skills Double #-}
+{-# SPECIALISE excludeSkills :: Skills AD -> Skills AD
+                             -> Skills AD #-}
 
 data Player d = Player
   { _games :: M.HashMap GameID (Skills d) -- ^ Includes all games that were
@@ -108,6 +117,12 @@ train parameter gameID result players =
       where
         p = player ^. skills
         g = M.lookupDefault def gameID (view games player)
+{-# SPECIALISE train :: Parameter Double -> GameID -> Result
+                     -> ([Player Double], [Player Double])
+                     -> ([Player Double], [Player Double]) #-}
+{-# SPECIALISE train :: Parameter AD -> GameID -> Result
+                     -> ([Player AD], [Player AD])
+                     -> ([Player AD], [Player AD]) #-}
 
 -- | Calculates the Gaussian belief of a game result.
 predict :: Floating d => Parameter d -> ([Player d], [Player d])
@@ -134,6 +149,10 @@ predict parameter players = toDifferenceMsgs
 
     skillMsgs = mapSkillMsgs (fromSkill (parameter^.sigmaOffense))
                              (fromSkill (parameter^.sigmaDefense)) sentSkills'
+{-# SPECIALISE predict :: Parameter Double -> ([Player Double], [Player Double])
+                       -> (Message Double, Message Double) #-}
+{-# SPECIALISE predict :: Parameter AD -> ([Player AD], [Player AD])
+                       -> (Message AD, Message AD) #-}
 
 -- | A complete message pass down to the observed result variable and back.
 treePass :: (Floating d, Ord d)
@@ -186,6 +205,12 @@ treePass parameter (Result result) playerSkills =
 
     skillMsgs = mapSkillMsgs (fromSkill (parameter^.sigmaOffense))
                              (fromSkill (parameter^.sigmaDefense)) playerSkills
+{-# SPECIALISE treePass :: Parameter Double -> Result
+                        -> ([Skills Double], [Skills Double])
+                        -> ([Skills Double], [Skills Double]) #-}
+{-# SPECIALISE treePass :: Parameter AD -> Result
+                        -> ([Skills AD], [Skills AD])
+                        -> ([Skills AD], [Skills AD]) #-}
 
 mapSkillMsgs :: (Message d -> Message d)
              -> (Message d -> Message d)
@@ -205,6 +230,8 @@ fromSkill beta msg = Message
   where
     a = 1.0 / (1.0 + c2 * msg^.pi_)
     c2 = beta ^ (2 :: Int)
+{-# SPECIALISE fromSkill :: Double -> Message Double -> Message Double #-}
+{-# SPECIALISE fromSkill :: AD -> Message AD -> Message AD #-}
 
 -- | Pass of a weighted sum.
 weightedPass :: Floating d => [(d, Message d)] -> Message d
@@ -224,14 +251,22 @@ weightedPass msgs = Message
 
     piNew = 1.0 / invPiNew
     tauNew = piNew * preTau
+{-# SPECIALISE weightedPass :: [(Double, Message Double)] -> Message Double #-}
+{-# SPECIALISE weightedPass :: [(AD, Message AD)] -> Message AD #-}
 
 -- | Calculates the belief of the team skill given player skills.
 fromPerformance :: Floating d => [Message d] -> Message d
 fromPerformance msgs = weightedPass $ zip (repeat 1) msgs
+{-# SPECIALISE fromPerformance :: [Message Double] -> Message Double #-}
+{-# SPECIALISE fromPerformance :: [Message AD] -> Message AD #-}
 
 toDifference :: Floating d => (Message d, Message d) -> Message d
 toDifference (performanceLeftMsg, performanceRightMsg) =
     weightedPass [(1, performanceLeftMsg), (-1, performanceRightMsg)]
+{-# SPECIALISE toDifference :: (Message Double, Message Double)
+                            -> Message Double #-}
+{-# SPECIALISE toDifference :: (Message AD, Message AD)
+                            -> Message AD #-}
 
 -- | Calculates the messages from the difference random variable back up to the
 -- team variables.
@@ -241,6 +276,12 @@ fromDifference toDifferenceFactorMsg (performanceLeftMsg, performanceRightMsg) =
     ( weightedPass [(1, performanceRightMsg), (1, toDifferenceFactorMsg)]
     , weightedPass [(1, performanceLeftMsg), (-1, toDifferenceFactorMsg)]
     )
+{-# SPECIALISE fromDifference :: Message Double
+                              -> (Message Double, Message Double)
+                              -> (Message Double, Message Double) #-}
+{-# SPECIALISE fromDifference :: Message AD
+                              -> (Message AD, Message AD)
+                              -> (Message AD, Message AD) #-}
 
 -- | Given the message from the difference random variable this function
 -- calculates the messages to each of the involved player game skill variables
@@ -255,7 +296,13 @@ toPerformance fromPerformanceMsgs msg = go [] fromPerformanceMsgs
         : go (m : headMsgs) tailMsgs
 
     zipM1 msgs = zip (repeat (-1)) msgs
+{-# SPECIALISE toPerformance :: [Message Double] -> Message Double
+                             -> [Message Double] #-}
+{-# SPECIALISE toPerformance :: [Message AD] -> Message AD
+                             -> [Message AD] #-}
 
 -- | Message for a player skill variable given its corresponding game variable.
 toSkill :: Floating d => d -> Message d -> Message d
 toSkill beta = fromSkill beta
+{-# SPECIALISE toSkill :: Double -> Message Double -> Message Double #-}
+{-# SPECIALISE toSkill :: AD -> Message AD -> Message AD #-}
