@@ -48,9 +48,8 @@ test-suite test_autodiff
   ghc-options:         -Wall -fwarn-tabs -O2 -fdicts-cheap
                        -funbox-strict-fields
 
-
-executable bundesliga
-  main-is:             bundesliga.hs
+executable train
+  main-is:             train_app.hs
   build-depends:       base >=4.6 && <4.7
                      , lens
                      , unordered-containers >=0.2 && <0.3
@@ -63,9 +62,8 @@ executable bundesliga
                      , optimization
                      , data-default
                      , deepseq
-                     , criterion
-                     , QuickCheck
                      , parallel
+                     , aeson
   -- hs-source-dirs:
   default-language:    Haskell2010
 
