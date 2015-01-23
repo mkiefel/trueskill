@@ -1,6 +1,5 @@
 module Train where
 
-
 import           Control.Lens
 import           Data.Default ( def )
 import qualified Data.HashMap.Strict as M

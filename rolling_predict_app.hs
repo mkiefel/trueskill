@@ -57,9 +57,9 @@ instance Show Prediction where
 
 rollingPredict trainFile testFile knobs = runEitherT $ do
     trainData <- hoistEither =<<
-                 (lift $ readGamesFromCsv trainFile)
+                 lift (readGamesFromCsv trainFile)
     testData <- hoistEither =<<
-                (lift $ readGamesFromCsv testFile)
+                lift (readGamesFromCsv testFile)
 
     let initModel = trainModel parameter defaultPlayer trainData
     let initPrediction = Prediction undefined undefined undefined initModel
