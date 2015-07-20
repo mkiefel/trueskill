@@ -45,9 +45,6 @@ updateModel parameter defaultPlayer players game = updatedModel
 
     get p = M.lookupDefault defaultPlayer p players
 
-a :: Int -> [Int]
-a b = take 10 $ repeat b
-
 trainModel :: (Floating d, Ord d, Show d)
     => Int -> Parameter d -> Player d -> V.Vector Game -> Model d
 trainModel passes parameter defaultPlayer games =
