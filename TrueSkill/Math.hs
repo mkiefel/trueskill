@@ -16,10 +16,21 @@ module TrueSkill.Math
   , choose
   , fac
   , doubleFac
+  , argMax
   )
   where
 
+import           Data.List ( foldl' )
+
 import           TrueSkill.Autodiff
+
+argMax :: Ord d => [d] -> Int
+argMax []     = undefined
+argMax (s:ss) = fst $ foldl' go (0, s) $ zip [1..] ss
+    where
+    go left@(_, v) right@(_, w)
+        | w > v     = right
+        | otherwise = left
 
 -- | Binomial coefficient.
 choose :: Int -> Int -> Int

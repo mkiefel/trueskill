@@ -8,7 +8,6 @@ import           Control.Monad.Trans.Either ( EitherT(..)
 import           Control.Monad.Trans.Class ( lift )
 import           Data.Default ( def )
 import qualified Data.HashMap.Strict as M
-import           Data.List ( foldl' )
 import qualified Data.Vector as V
 import           System.Environment ( getArgs )
 import           Text.Printf ( printf )
@@ -23,6 +22,7 @@ import           TrueSkill ( predict
                            , offense
                            , defense
                            , Result(..) )
+import           TrueSkill.Math ( argMax )
 
 import           Train
 import           Types
@@ -36,15 +36,6 @@ data Prediction = Prediction
                   }
 makeLenses ''Prediction
 
-argMax :: Ord d => [d] -> Int
-argMax (s:ss) = fst $ foldl' go (0, s) $ zip [1..] ss
-    where
-    go left@(_, v) right@(_, s)
-        | s > v     = right
-        | otherwise = left
-    go m _ = m
-argMax [] = -1
-
 instance Show Prediction where
   show p = printf "(%d, %d):\n" homeGoals guestGoals ++
            concatMap (printf "%0.2f, ") (p^.predictionHome) ++ "\n" ++
@@ -54,7 +45,7 @@ instance Show Prediction where
     where
       Result (homeGoals, guestGoals) = p^.predictionGame.result
 
-
+rollingPredict :: FilePath -> FilePath -> Knobs -> IO (Either String ())
 rollingPredict trainFile testFile knobs = runEitherT $ do
     trainData <- hoistEither =<<
                  lift (readGamesFromCsv trainFile)
@@ -68,7 +59,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
     lift $ mapM_ print $ V.toList $ V.tail predictions
 
-    let mse = fromIntegral (V.sum $ V.map mseResult $ V.tail predictions)
+    let mse = (V.sum $ V.map mseResult $ V.tail predictions)
               / fromIntegral ((V.length $ V.tail predictions) * 2)
     lift $ print mse
 
@@ -81,9 +72,10 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
       finalPrediction^.predictionModel
 
   where
-    mseResult :: Prediction -> Int
-    mseResult p = (argMax (p^.predictionHome) - homeGoals)^(2 :: Int)
-                  + (argMax (p^.predictionGuest) - guestGoals)^(2 :: Int)
+    mseResult :: Prediction -> Double
+    mseResult p = fromIntegral
+                  ((argMax (p^.predictionHome) - homeGoals)^(2 :: Int)
+                   + (argMax (p^.predictionGuest) - guestGoals)^(2 :: Int))
       where
         Result (homeGoals, guestGoals) = p^.predictionGame.result
 
@@ -93,7 +85,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
     findMaxPlayer fun i = M.foldlWithKey' go ("n/a", i)
       where
-        go c@(name, v) name' p'
+        go c@(_, v) name' p'
           | v' > v    = (name', v')
           | otherwise = c
             where
