@@ -15,6 +15,7 @@ data Knobs = Knobs
              , getDefaultSigmaDefense :: Double
              , getSigmaOffense :: Double
              , getSigmaDefense :: Double
+             , getMessagePasses :: Int
              }
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''Knobs)
 

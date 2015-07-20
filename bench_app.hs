@@ -54,13 +54,14 @@ defaultPlayer = skills .~ makeSkills
 buildEval :: V.Vector Game -> V.Vector Game -> Double
 buildEval trainData valData = value
   where
-    value = objective trainData valData [ defaultParameter ^. sigmaOffense
-                                        , defaultParameter ^. sigmaDefense
-                                        , defaultMuOffense
-                                        , defaultSigmaOffense**2
-                                        , defaultMuDefense
-                                        , defaultSigmaDefense**2
-                                        ]
+    value = objective 3 trainData valData
+            [ defaultParameter ^. sigmaOffense
+            , defaultParameter ^. sigmaDefense
+            , defaultMuOffense
+            , defaultSigmaOffense**2
+            , defaultMuDefense
+            , defaultSigmaDefense**2
+            ]
 
 gradEval :: V.Vector Game -> V.Vector Game -> (Double, V2 Double)
 gradEval trainData valData = value `seq` grad `seq` (value, grad)
@@ -80,7 +81,7 @@ gradEval trainData valData = value `seq` grad `seq` (value, grad)
     --                                                 , defaultSigmaDefense^2
     --                                                 ]
 
-    AD value grad = objective trainData valData initial
+    AD value grad = objective 3 trainData valData initial
 
     initial :: [AD]
     initial = map (uncurry makeAD) $ zip [ defaultParameter ^. sigmaOffense

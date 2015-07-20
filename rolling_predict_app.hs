@@ -61,7 +61,8 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
     testData <- hoistEither =<<
                 lift (readGamesFromCsv testFile)
 
-    let initModel = trainModel parameter defaultPlayer trainData
+    let initModel = trainModel (getMessagePasses knobs) parameter
+                    defaultPlayer trainData
     let initPrediction = Prediction undefined undefined undefined initModel
     let predictions = V.scanl' roll initPrediction testData
 

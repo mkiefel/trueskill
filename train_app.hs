@@ -8,7 +8,7 @@ import           Control.Monad.Trans.Either ( EitherT(..)
 import           Control.Monad.Trans.Class ( lift )
 import           Control.Parallel.Strategies
 import qualified Data.Vector as V
-import           Linear.V2 hiding ( trace )
+import           Linear.V2
 
 import           TrueSkill.Autodiff hiding ( lift )
 
@@ -18,34 +18,38 @@ import           Train
 
 import           Debug.Trace
 
-parallelObjectiveGrad :: V.Vector Game -> V.Vector Game
+parallelObjectiveGrad :: Int -> V.Vector Game -> V.Vector Game
                       -> [Double] -> [Double]
-parallelObjectiveGrad trainData valData parameter = runEval $ do
+parallelObjectiveGrad passes trainData valData parameter = runEval $ do
   let offsets = [ 0, 2, 4 ]
 
   let adParameter = map liftParameter offsets
-  values <- mapM (rpar . objective trainData valData) adParameter
+  values <- mapM (rpar . objective passes trainData valData) adParameter
   mapM_ rseq values
 
   let gradient = concatMap (readGradient . getGradient) values
 
   return $ trace ("snorm: " ++ show (snorm gradient)) gradient
     where
-      snorm gradient = sum $ map (^2) gradient
+      snorm gradient = sum $ map (^ (2 :: Int)) gradient
 
       readGradient v = [ v^._x, v^._y ]
       liftParameter offset = map go $ zip [0..] parameter
         where
           go (i, p) = makeAD p (i - offset)
 
+train :: FilePath -> FilePath -> FilePath -> Knobs
+      -> IO (Either String ())
 train trainFile valFile outKnobsFile knobs = runEitherT $ do
   trainData <- hoistEither =<<
                (lift $ readGamesFromCsv trainFile)
   valData <- hoistEither =<<
              (lift $ readGamesFromCsv valFile)
 
-  let ps = take 200 $ optimizer (objective trainData valData)
-           (parallelObjectiveGrad trainData valData)
+  let ps = take 200 $ optimizer
+           (objective (getMessagePasses knobs) trainData valData)
+           (parallelObjectiveGrad (getMessagePasses knobs) trainData
+            valData)
            [ getSigmaOffense knobs
            , getSigmaDefense knobs
            , getDefaultMuOffense knobs
@@ -66,9 +70,7 @@ train trainFile valFile outKnobsFile knobs = runEitherT $ do
   lift $ writeKnobs outKnobsFile $
     Knobs defaultMuOffense' (sqrt defaultSigmaOffense2')
     defaultMuDefense' (sqrt defaultSigmaDefense2')
-    sigmaOffense' sigmaDefense'
-
-  return 0
+    sigmaOffense' sigmaDefense' (getMessagePasses knobs)
 
 main :: IO ()
 main = do

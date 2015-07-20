@@ -22,38 +22,46 @@ import           Types
 
 import           Debug.Trace
 
-updateModel :: (Floating d, Ord d)
+updateModel :: (Floating d, Ord d, Show d)
     => Parameter d -> Player d -> Model d -> Game -> Model d
 updateModel parameter defaultPlayer players game = updatedModel
   where
     (updatedTeam1, updatedTeam2) = train parameter
                                     (game ^. gameID)
                                     (game ^. result)
-                                    ( (map get $ game ^. team1)
-                                    , (map get $ game ^. team2) )
+                                    ( map get $ game ^. team1
+                                    , map get $ game ^. team2 )
 
     updatedModel = foldl' put players
                     $ zip (game ^. team1 ++ game ^. team2)
                           (updatedTeam1 ++ updatedTeam2)
 
-    put m (p, player) = M.insert p player m
+    -- put m (p, player) = M.insert p player m
+    put m (p, player)
+      | p == "Lahm" = trace (show $ player^.skills) $ M.insert p player m
+      | otherwise = M.insert p player m
 
     get p = M.lookupDefault defaultPlayer p players
 
-trainModel :: (Floating d, Ord d)
-    => Parameter d -> Player d -> V.Vector Game -> Model d
-trainModel parameter defaultPlayer =
-    V.foldl' (updateModel parameter defaultPlayer) M.empty
+a :: Int -> [Int]
+a b = take 10 $ repeat b
 
-objective :: (Floating d, Ord d) => V.Vector Game -> V.Vector Game
-          -> [d] -> d
-objective trainData valData [ sigmaOffense
-                            , sigmaDefense
-                            , muOffense
-                            , sigmaOffense2
-                            , muDefense
-                            , sigmaDefense2
-                            ] =
+trainModel :: (Floating d, Ord d, Show d)
+    => Int -> Parameter d -> Player d -> V.Vector Game -> Model d
+trainModel passes parameter defaultPlayer games =
+    foldl' singlePass M.empty $ replicate passes games
+  where
+    singlePass = V.foldl' (updateModel parameter defaultPlayer)
+
+objective :: (Floating d, Ord d, Show d) =>
+             Int -> V.Vector Game -> V.Vector Game -> [d] -> d
+objective passes trainData valData [ sigmaOffense
+                                   , sigmaDefense
+                                   , muOffense
+                                   , sigmaOffense2
+                                   , muDefense
+                                   , sigmaDefense2
+                                   ] =
     V.sum (V.map loss valData) / fromIntegral (V.length valData)
   where
     parameter = Parameter
@@ -66,7 +74,7 @@ objective trainData valData [ sigmaOffense
                     (fromMuSigma2 muDefense sigmaDefense2)
                     $ def
 
-    model = trainModel parameter defaultPlayer trainData
+    model = trainModel passes parameter defaultPlayer trainData
 
     loss game = uncurry (readout (game ^. result))
                 $ both %~ predictionMessage
@@ -76,7 +84,8 @@ objective trainData valData [ sigmaOffense
     readout (Result (g1, g2)) p1 p2 = -log (p1 !! g1) - log (p2 !! g2)
 
     get p = M.lookupDefault defaultPlayer p model
-objective _ _ _ = undefined
+-- The case when not the right number of arguments has been passed.
+objective _ _ _ _ = undefined
 
 optimizer :: ([Double] -> Double)
           -> ([Double] -> [Double])
