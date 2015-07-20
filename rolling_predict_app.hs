@@ -14,14 +14,12 @@ import           System.Environment ( getArgs )
 import           Text.Printf ( printf )
 
 import           TrueSkill ( predict
-                           , train
                            , fromMuSigma2
                            , toMuSigma2
                            , skills
                            , makeSkills
                            , Parameter(..)
                            , predictionMessage
-                           , Player
                            , offense
                            , defense
                            , Result(..) )
@@ -38,6 +36,15 @@ data Prediction = Prediction
                   }
 makeLenses ''Prediction
 
+argMax :: Ord d => [d] -> Int
+argMax (s:ss) = fst $ foldl' go (0, s) $ zip [1..] ss
+    where
+    go left@(_, v) right@(_, s)
+        | s > v     = right
+        | otherwise = left
+    go m _ = m
+argMax [] = -1
+
 instance Show Prediction where
   show p = printf "(%d, %d):\n" homeGoals guestGoals ++
            concatMap (printf "%0.2f, ") (p^.predictionHome) ++ "\n" ++
@@ -47,13 +54,6 @@ instance Show Prediction where
     where
       Result (homeGoals, guestGoals) = p^.predictionGame.result
 
-      argMax :: Ord d => [d] -> Int
-      argMax (s:ss) = fst $ foldl' go (0, s) $ zip [1..] ss
-        where
-          go left@(_, v) right@(_, s)
-            | s > v     = right
-            | otherwise = left
-          go m _ = m
 
 rollingPredict trainFile testFile knobs = runEitherT $ do
     trainData <- hoistEither =<<
@@ -68,6 +68,10 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
     lift $ mapM_ print $ V.toList $ V.tail predictions
 
+    let mse = fromIntegral (V.sum $ V.map mseResult $ V.tail predictions)
+              / fromIntegral ((V.length $ V.tail predictions) * 2)
+    lift $ print mse
+
     let finalPrediction = V.last predictions
 
     -- Print the best offense/defense player.
@@ -77,6 +81,12 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
       finalPrediction^.predictionModel
 
   where
+    mseResult :: Prediction -> Int
+    mseResult p = (argMax (p^.predictionHome) - homeGoals)^(2 :: Int)
+                  + (argMax (p^.predictionGuest) - guestGoals)^(2 :: Int)
+      where
+        Result (homeGoals, guestGoals) = p^.predictionGame.result
+
     evalPlayer skill' p = mu - 2 * sqrt sigma2
       where
         (mu, sigma2) = toMuSigma2 (p^.skills.skill')
@@ -90,8 +100,8 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
               v' = fun p'
 
     roll prediction game =
-        Prediction homeGoals guestGoals game $
-        updateModel parameter defaultPlayer model game
+        Prediction homeGoals guestGoals game $ model
+        -- updateModel parameter defaultPlayer model game
       where
         model = prediction ^. predictionModel
 
