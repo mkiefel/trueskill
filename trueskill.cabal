@@ -23,10 +23,11 @@ executable bench
                      , either >=4.4 && <4.5
                      , transformers
                      , linear
-                     , optimization
                      , data-default
                      , deepseq
                      , criterion
+                     , l-bfgs-b
+                     , array
   -- hs-source-dirs:
   default-language:    Haskell2010
 
@@ -59,11 +60,12 @@ executable train
                      , either >=4.4 && <4.5
                      , transformers
                      , linear
-                     , optimization
                      , data-default
                      , deepseq
                      , parallel
                      , aeson
+                     , l-bfgs-b
+                     , array
   -- hs-source-dirs:
   default-language:    Haskell2010
 
@@ -84,11 +86,12 @@ executable rolling_predict
                      , either >=4.4 && <4.5
                      , transformers
                      , linear
-                     , optimization
                      , data-default
                      , deepseq
                      , parallel
                      , aeson
+                     , l-bfgs-b
+                     , array
   -- hs-source-dirs:
   default-language:    Haskell2010
 

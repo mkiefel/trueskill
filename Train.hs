@@ -5,9 +5,10 @@ import           Data.Default ( def )
 import qualified Data.HashMap.Strict as M
 import           Data.List ( foldl' )
 import qualified Data.Vector as V
-import           Linear.Metric ( Metric )
-import           Optimization.LineSearch
-import           Optimization.LineSearch.BFGS
+import qualified Data.Vector.Storable as VS
+
+import           Numeric.LBFGSB
+import           Numeric.LBFGSB.Result ( solution )
 
 import           TrueSkill ( predict
                            , train
@@ -39,7 +40,7 @@ updateModel parameter defaultPlayer players game = updatedModel
 
     -- put m (p, player) = M.insert p player m
     put m (p, player)
-      | p == "Lahm" = trace (show $ player^.skills) $ M.insert p player m
+      -- | p == "Lahm" = trace (show $ player^.skills) $ M.insert p player m
       | otherwise = M.insert p player m
 
     get p = M.lookupDefault defaultPlayer p players
@@ -82,28 +83,25 @@ objective passes trainData valData [ sigmaOffense
                 $ predict parameter ( map get $ game ^. team1
                                     , map get $ game ^. team2
                                     )
-    readout (Result (g1, g2)) p1 p2 = -log (p1 !! g1) - log (p2 !! g2)
+    readout (Result (g1, g2)) p1 p2 = -log (p1 !! g1 + 1e-3) - log (p2 !! g2 + 1e-3)
 
     get p = M.lookupDefault defaultPlayer p model
 -- The case when not the right number of arguments has been passed.
 objective _ _ _ _ = undefined
 
-instance Metric []
-
 optimizer :: ([Double] -> Double)
           -> ([Double] -> [Double])
           -> [Double]
-          -> [[Double]]
-optimizer f df = bfgs search df [ [1, 0, 0, 0, 0, 0]
-                                , [0, 1, 0, 0, 0, 0]
-                                , [0, 0, 1, 0, 0, 0]
-                                , [0, 0, 0, 1, 0, 0]
-                                , [0, 0, 0, 0, 1, 0]
-                                , [0, 0, 0, 0, 0, 1]
-                                ]
+          -> [Double]
+optimizer f g initX =
+  VS.toList
+  $ solution
+  $ minimize 5 1e7 1e-5 (Just steps) (repeat (Just 1e-2, Nothing)) (VS.fromList initX)
+  wrappedF (VS.fromList . g . VS.toList)
   where
-    search = armijoSearch 0.1 0.2 0.2 wrappedF
+    steps = 100
 
-    wrappedF x = trace (show x ++ ": " ++ show v) v
+    wrappedF x = trace (show x' ++ ": " ++ show fx) fx
       where
-        v = f x
+        x' = VS.toList x
+        fx = f x'

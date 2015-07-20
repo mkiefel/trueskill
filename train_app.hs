@@ -11,12 +11,16 @@ import qualified Data.Vector as V
 import           Linear.V2
 
 import           TrueSkill.Autodiff hiding ( lift )
+import qualified TrueSkill.Autodiff as AD
 
 import           Parameter
 import           Types
 import           Train
 
 import           Debug.Trace
+
+scale :: Double
+scale = 10.0
 
 parallelObjectiveGrad :: Int -> V.Vector Game -> V.Vector Game
                       -> [Double] -> [Double]
@@ -28,15 +32,14 @@ parallelObjectiveGrad passes trainData valData parameter = runEval $ do
   mapM_ rseq values
 
   let gradient = concatMap (readGradient . getGradient) values
+  let (v:_) = map getValue values
 
-  return $ trace ("snorm: " ++ show (snorm gradient)) gradient
+  return $ trace (show parameter ++ ": " ++ show v ++ "; " ++ show gradient) gradient
     where
-      snorm gradient = sum $ map (^ (2 :: Int)) gradient
-
       readGradient v = [ v^._x, v^._y ]
       liftParameter offset = map go $ zip [0..] parameter
         where
-          go (i, p) = makeAD p (i - offset)
+          go (i, p) = (makeAD p (i - offset)) / AD.lift scale
 
 train :: FilePath -> FilePath -> FilePath -> Knobs
       -> IO (Either String ())
@@ -46,10 +49,10 @@ train trainFile valFile outKnobsFile knobs = runEitherT $ do
   valData <- hoistEither =<<
              (lift $ readGamesFromCsv valFile)
 
-  let ps = take 200 $ optimizer
-           (objective (getMessagePasses knobs) trainData valData)
+  let ps = map (/ scale) $ optimizer
+           (objective (getMessagePasses knobs) trainData valData . map (/ scale))
            (parallelObjectiveGrad (getMessagePasses knobs) trainData
-            valData)
+            valData) $ map (* scale)
            [ getSigmaOffense knobs
            , getSigmaDefense knobs
            , getDefaultMuOffense knobs
@@ -65,7 +68,7 @@ train trainFile valFile outKnobsFile knobs = runEitherT $ do
         , defaultMuOffense'
         , defaultSigmaOffense2'
         , defaultMuDefense'
-        , defaultSigmaDefense2' ] = last ps
+        , defaultSigmaDefense2' ] = ps
 
   lift $ writeKnobs outKnobsFile $
     Knobs defaultMuOffense' (sqrt defaultSigmaOffense2')
