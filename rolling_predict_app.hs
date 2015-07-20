@@ -40,10 +40,41 @@ instance Show Prediction where
   show p = printf "(%d, %d):\n" homeGoals guestGoals ++
            concatMap (printf "%0.2f, ") (p^.predictionHome) ++ "\n" ++
            concatMap (printf "%0.2f, ") (p^.predictionGuest) ++ "\n" ++
-           printf "-> (%d, %d)\n" (argMax (p^.predictionHome))
-           (argMax (p^.predictionGuest))
+           printf "-> (%d, %d): (%0.2f)\n" predHomeGoals predGuestGoals
+           (loss p)
     where
       Result (homeGoals, guestGoals) = p^.predictionGame.result
+
+      (predHomeGoals, predGuestGoals) = score p
+
+loss :: Prediction -> Double
+loss p = error' predHomeGoals homeGoals
+         + error' predGuestGoals guestGoals
+  where
+    Result (homeGoals, guestGoals) = p^.predictionGame.result
+
+    (predHomeGoals, predGuestGoals) = score p
+
+    error' :: Int -> Int -> Double
+    error' predGoals goals = fromIntegral ((predGoals - goals)^(2 :: Int))
+
+score :: Prediction -> (Int, Int)
+score p = ( bestPrediction (p^.predictionHome)
+          , bestPrediction (p^.predictionGuest) )
+  where
+
+    bestPrediction :: [Double] -> Int
+    bestPrediction = argMax . map (\d -> -d) . predictionCosts
+
+    predictionCosts :: [Double] -> [Double]
+    predictionCosts probs = map (predictionCost probs) $ [0..length probs]
+
+    predictionCost :: [Double] -> Int -> Double
+    predictionCost probs g = sum $ map
+                             (\(g', prob) -> prob
+                                             * fromIntegral ((g' - g)^(2 :: Int)))
+                             $ zip [0..] probs
+
 
 rollingPredict :: FilePath -> FilePath -> Knobs -> IO (Either String ())
 rollingPredict trainFile testFile knobs = runEitherT $ do
@@ -59,7 +90,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
     lift $ mapM_ print $ V.toList $ V.tail predictions
 
-    let mse = (V.sum $ V.map mseResult $ V.tail predictions)
+    let mse = (V.sum $ V.map loss $ V.tail predictions)
               / fromIntegral ((V.length $ V.tail predictions) * 2)
     lift $ print mse
 
@@ -70,15 +101,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
       finalPrediction^.predictionModel
     lift $ print $ findMaxPlayer (evalPlayer defense) 0 $
       finalPrediction^.predictionModel
-
   where
-    mseResult :: Prediction -> Double
-    mseResult p = fromIntegral
-                  ((argMax (p^.predictionHome) - homeGoals)^(2 :: Int)
-                   + (argMax (p^.predictionGuest) - guestGoals)^(2 :: Int))
-      where
-        Result (homeGoals, guestGoals) = p^.predictionGame.result
-
     evalPlayer skill' p = mu - 2 * sqrt sigma2
       where
         (mu, sigma2) = toMuSigma2 (p^.skills.skill')
