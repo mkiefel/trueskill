@@ -50,7 +50,7 @@ instance Show Prediction where
       argMax :: Ord d => [d] -> Int
       argMax (s:ss) = fst $ foldl' go (0, s) $ zip [1..] ss
         where
-          go left@(i, v) right@(j, s)
+          go left@(_, v) right@(_, s)
             | s > v     = right
             | otherwise = left
           go m _ = m

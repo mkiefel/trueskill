@@ -20,7 +20,7 @@ executable bench
                      , bytestring >=0.10 && <0.11
                      , vector >=0.10 && <0.11
                      , cassava >=0.4 && <0.5
-                     , either >=4.3 && <4.4
+                     , either >=4.4 && <4.5
                      , transformers
                      , linear
                      , optimization
@@ -56,7 +56,7 @@ executable train
                      , bytestring >=0.10 && <0.11
                      , vector >=0.10 && <0.11
                      , cassava >=0.4 && <0.5
-                     , either >=4.3 && <4.4
+                     , either >=4.4 && <4.5
                      , transformers
                      , linear
                      , optimization
@@ -81,7 +81,7 @@ executable rolling_predict
                      , bytestring >=0.10 && <0.11
                      , vector >=0.10 && <0.11
                      , cassava >=0.4 && <0.5
-                     , either >=4.3 && <4.4
+                     , either >=4.4 && <4.5
                      , transformers
                      , linear
                      , optimization

@@ -5,6 +5,7 @@ import           Data.Default ( def )
 import qualified Data.HashMap.Strict as M
 import           Data.List ( foldl' )
 import qualified Data.Vector as V
+import           Linear.Metric ( Metric )
 import           Optimization.LineSearch
 import           Optimization.LineSearch.BFGS
 
@@ -86,6 +87,8 @@ objective passes trainData valData [ sigmaOffense
     get p = M.lookupDefault defaultPlayer p model
 -- The case when not the right number of arguments has been passed.
 objective _ _ _ _ = undefined
+
+instance Metric []
 
 optimizer :: ([Double] -> Double)
           -> ([Double] -> [Double])
