@@ -34,7 +34,12 @@ parallelObjectiveGrad passes trainData valData parameter = runEval $ do
   let gradient = concatMap (readGradient . getGradient) values
   let (v:_) = map getValue values
 
-  return $ trace (show parameter ++ ": " ++ show v ++ "; " ++ show gradient) gradient
+  let clean_gradient = if any isNaN gradient
+                       then replicate (length gradient) 10000
+                       else gradient
+
+  return $ trace (show parameter ++ ": " ++ show v ++ "; "
+                  ++ show clean_gradient) clean_gradient
     where
       readGradient v = [ v^._x, v^._y ]
       liftParameter offset = map go $ zip [0..] parameter

@@ -93,12 +93,15 @@ optimizer :: ([Double] -> Double)
 optimizer f g initX =
   VS.toList
   $ solution
-  $ minimize 5 1e7 1e-5 (Just steps) (repeat (Just 1e-2, Nothing)) (VS.fromList initX)
-  wrappedF (VS.fromList . g . VS.toList)
+  $ minimize 5 1e7 1e-5 (Just steps) (repeat (Just 0.0, Nothing))
+  (VS.fromList initX) wrappedF (VS.fromList . g . VS.toList)
   where
     steps = 100
 
-    wrappedF x = trace (show x' ++ ": " ++ show fx) fx
+    wrappedF x = trace (show x' ++ ": " ++ show fx') fx'
       where
         x' = VS.toList x
         fx = f x'
+        fx'
+          | isNaN fx = 10000 -- 1 / 0
+          | otherwise = fx
