@@ -40,8 +40,12 @@ readGamesFromCsv path = BL.readFile path >>= return . decodeCsv
 parseGame :: V.Vector String -> Game
 parseGame row = Game team1' team2' result' gameID'
   where
+    -- Players
     team1' = map (\i -> row!i) [8..8+10]
     team2' = map (\i -> row!i) [19..19+10]
+    -- Teams
+    -- team1' = map (\i -> row!i) [2]
+    -- team2' = map (\i -> row!i) [6]
     gameID' = read $ row!0
 
     [score1String, score2String] = splitBy ':' $ head $ splitBy ' ' $ row!7
