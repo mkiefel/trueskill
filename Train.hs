@@ -110,5 +110,5 @@ optimizer f g initX =
         x' = VS.toList x
         fx = f x'
         fx'
-          | isNaN fx = 10000 -- 1 / 0
+          | isNaN fx = 100 -- 1 / 0
           | otherwise = fx

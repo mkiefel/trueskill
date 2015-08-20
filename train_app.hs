@@ -35,7 +35,7 @@ parallelObjectiveGrad passes trainData valData parameter = runEval $ do
   let (v:_) = map getValue values
 
   let clean_gradient = if any isNaN gradient
-                       then replicate (length gradient) 10000
+                       then replicate (length gradient) (-100)
                        else gradient
 
   return $ trace (show parameter ++ ": " ++ show v ++ "; "
