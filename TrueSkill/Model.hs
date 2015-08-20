@@ -25,7 +25,7 @@ import qualified TrueSkill.Poisson as Poisson
 import           TrueSkill.Autodiff
 
 
-type GameID = Int
+type GameID = String
 
 data Skills d = Skills
   { _offense :: Message d

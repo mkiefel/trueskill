@@ -27,7 +27,7 @@ data Game = Game
   { _team1  :: ![String]
   , _team2  :: ![String]
   , _result :: !Result
-  , _gameID :: !Int
+  , _gameID :: !String
   } deriving Show
 makeLenses ''Game
 
