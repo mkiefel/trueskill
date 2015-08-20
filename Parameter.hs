@@ -16,7 +16,11 @@ data Knobs = Knobs
              , getSigmaOffense :: Double
              , getSigmaDefense :: Double
              , getMessagePasses :: Int
-             }
+             , getMuHomeBonusOffense :: Double
+             , getSigmaHomeBonusOffense :: Double
+             , getMuHomeBonusDefense :: Double
+             , getSigmaHomeBonusDefense :: Double
+             } deriving Show
 $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''Knobs)
 
 readKnobs :: FilePath -> IO (Maybe Knobs)

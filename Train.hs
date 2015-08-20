@@ -60,12 +60,19 @@ objective passes trainData valData [ sigmaOffense
                                    , sigmaOffense2
                                    , muDefense
                                    , sigmaDefense2
+                                   , muHomeBonusOffense
+                                   , sigmaHomeBonusOffense2
+                                   , muHomeBonusDefense
+                                   , sigmaHomeBonusDefense2
                                    ] =
     V.sum (V.map loss valData) / fromIntegral (V.length valData)
   where
     parameter = Parameter
       { _sigmaOffense = sigmaOffense
       , _sigmaDefense = sigmaDefense
+      , _homeBonus = makeSkills
+                     (fromMuSigma2 muHomeBonusOffense sigmaHomeBonusOffense2)
+                     (fromMuSigma2 muHomeBonusDefense sigmaHomeBonusDefense2)
       }
 
     defaultPlayer = skills .~ makeSkills

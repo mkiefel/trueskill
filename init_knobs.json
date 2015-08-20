@@ -5,5 +5,9 @@
     "DefaultSigmaOffense": 0.1,
     "DefaultMuDefense": 9.090909090909091e-2,
     "DefaultSigmaDefense": 0.1,
-    "MessagePasses": 5
+    "MessagePasses": 5,
+    "MuHomeBonusOffense": 0,
+    "SigmaHomeBonusOffense": 0.1,
+    "MuHomeBonusDefense": 0,
+    "SigmaHomeBonusDefense": 0.1
 }

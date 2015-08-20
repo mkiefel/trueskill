@@ -25,7 +25,7 @@ scale = 10.0
 parallelObjectiveGrad :: Int -> V.Vector Game -> V.Vector Game
                       -> [Double] -> [Double]
 parallelObjectiveGrad passes trainData valData parameter = runEval $ do
-  let offsets = [ 0, 2, 4 ]
+  let offsets = [ 0, 2, 4, 6, 8 ]
 
   let adParameter = map liftParameter offsets
   values <- mapM (rpar . objective passes trainData valData) adParameter
@@ -64,6 +64,10 @@ train trainFile valFile outKnobsFile knobs = runEitherT $ do
            , getDefaultSigmaOffense knobs ^ (2 :: Int)
            , getDefaultMuDefense knobs
            , getDefaultSigmaDefense knobs ^ (2 :: Int)
+           , getMuHomeBonusOffense knobs
+           , getSigmaHomeBonusOffense knobs ^ (2 :: Int)
+           , getMuHomeBonusDefense knobs
+           , getSigmaHomeBonusDefense knobs ^ (2 :: Int)
            ]
 
   lift $ print ps
@@ -73,18 +77,26 @@ train trainFile valFile outKnobsFile knobs = runEitherT $ do
         , defaultMuOffense'
         , defaultSigmaOffense2'
         , defaultMuDefense'
-        , defaultSigmaDefense2' ] = ps
+        , defaultSigmaDefense2'
+        , muHomeBonusOffense'
+        , sigmaHomeBonusOffense2'
+        , muHomeBonusDefense'
+        , sigmaHomeBonusDefense2'
+        ] = ps
 
   lift $ writeKnobs outKnobsFile $
     Knobs defaultMuOffense' (sqrt defaultSigmaOffense2')
     defaultMuDefense' (sqrt defaultSigmaDefense2')
     sigmaOffense' sigmaDefense' (getMessagePasses knobs)
+    muHomeBonusOffense' (sqrt sigmaHomeBonusOffense2')
+    muHomeBonusDefense' (sqrt sigmaHomeBonusDefense2')
 
 main :: IO ()
 main = do
   [trainFile, valFile, inKnobsFile, outKnobsFile] <- getArgs
 
   rawKnobs <- readKnobs inKnobsFile
+  print rawKnobs
 
   case rawKnobs of
     Just knobs ->

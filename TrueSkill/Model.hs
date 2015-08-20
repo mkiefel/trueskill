@@ -25,13 +25,6 @@ import qualified TrueSkill.Poisson as Poisson
 import           TrueSkill.Autodiff
 
 
--- | The model parameters are gathered in this structure.
-data Parameter d = Parameter
-  { _sigmaOffense :: !d
-  , _sigmaDefense :: !d
-  }
-makeLenses ''Parameter
-
 type GameID = Int
 
 data Skills d = Skills
@@ -52,6 +45,15 @@ instance Floating d => Default (Skills d) where
                  }
 instance NFData (Skills d) where
     rnf (Skills o d) = rnf o `seq` rnf d
+
+-- | The model parameters are gathered in this structure.
+data Parameter d = Parameter
+  { _sigmaOffense :: !d
+  , _sigmaDefense :: !d
+  , _homeBonus :: Skills d
+  }
+makeLenses ''Parameter
+
 
 includeSkills :: Floating d => Skills d -> Skills d -> Skills d
 includeSkills s t = offense %~ (`include` (t^.offense)) $
@@ -88,6 +90,7 @@ newtype Result = Result (Int, Int)
 instance Floating d => Default (Parameter d) where
   def = Parameter { _sigmaOffense = 0.1
                   , _sigmaDefense = 0.1
+                  , _homeBonus = def
                   }
 
 fuse3 :: (t1 -> t2 -> t3 -> s) -> (t1, t1) -> (t2, t2) -> (t3, t3)
@@ -145,6 +148,7 @@ predict parameter players = toDifferenceMsgs
         both %~ (\s -> makeSkills
           (fromPerformance (traverse %~ view offense $ s))
           (fromPerformance (traverse %~ view defense $ s)))
+        $ _1 %~ ((parameter ^. homeBonus) :)
         $ skillMsgs
 
     skillMsgs = mapSkillMsgs (fromSkill (parameter^.sigmaOffense))
@@ -201,6 +205,7 @@ treePass parameter (Result result) playerSkills =
         both %~ (\s -> makeSkills
           (fromPerformance (traverse %~ view offense $ s))
           (fromPerformance (traverse %~ view defense $ s)))
+        $ _1 %~ ((parameter ^. homeBonus) :)
         $ skillMsgs
 
     skillMsgs = mapSkillMsgs (fromSkill (parameter^.sigmaOffense))

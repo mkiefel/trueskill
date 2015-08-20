@@ -129,9 +129,14 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
                                   )
 
     parameter =
-      Parameter
+      def
       { _sigmaOffense = getSigmaOffense knobs
       , _sigmaDefense = getSigmaDefense knobs
+      , _homeBonus = makeSkills
+                     (fromMuSigma2 (getMuHomeBonusOffense knobs)
+                      (getSigmaHomeBonusOffense2 knobs))
+                     (fromMuSigma2 (getMuHomeBonusDefense knobs)
+                      (getSigmaHomeBonusDefense2 knobs))
       }
 
     defaultPlayer = skills .~ makeSkills

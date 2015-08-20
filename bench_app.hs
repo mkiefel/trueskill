@@ -40,7 +40,7 @@ defaultSigmaDefense :: Floating d => d
 defaultSigmaDefense = 0.1
 
 defaultParameter :: Floating d => Parameter d
-defaultParameter = Parameter
+defaultParameter = def
     { _sigmaOffense = defaultSigmaOffense / 5.0
     , _sigmaDefense = defaultSigmaDefense / 5.0
     }
