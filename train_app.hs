@@ -58,16 +58,16 @@ train trainFile valFile outKnobsFile knobs = runEitherT $ do
            (objective (getMessagePasses knobs) trainData valData . map (/ scale))
            (parallelObjectiveGrad (getMessagePasses knobs) trainData
             valData) $ map (* scale)
-           [ getSigmaOffense knobs
-           , getSigmaDefense knobs
+           [ log $ getSigmaOffense knobs
+           , log $ getSigmaDefense knobs
            , getDefaultMuOffense knobs
-           , getDefaultSigmaOffense knobs ^ (2 :: Int)
+           , log (getDefaultSigmaOffense knobs ^ (2 :: Int))
            , getDefaultMuDefense knobs
-           , getDefaultSigmaDefense knobs ^ (2 :: Int)
+           , log (getDefaultSigmaDefense knobs ^ (2 :: Int))
            , getMuHomeBonusOffense knobs
-           , getSigmaHomeBonusOffense knobs ^ (2 :: Int)
+           , log (getSigmaHomeBonusOffense knobs ^ (2 :: Int))
            , getMuHomeBonusDefense knobs
-           , getSigmaHomeBonusDefense knobs ^ (2 :: Int)
+           , log (getSigmaHomeBonusDefense knobs ^ (2 :: Int))
            ]
 
   lift $ print ps
@@ -85,11 +85,12 @@ train trainFile valFile outKnobsFile knobs = runEitherT $ do
         ] = ps
 
   lift $ writeKnobs outKnobsFile $
-    Knobs defaultMuOffense' (sqrt defaultSigmaOffense2')
-    defaultMuDefense' (sqrt defaultSigmaDefense2')
-    sigmaOffense' sigmaDefense' (getMessagePasses knobs)
-    muHomeBonusOffense' (sqrt sigmaHomeBonusOffense2')
-    muHomeBonusDefense' (sqrt sigmaHomeBonusDefense2')
+    Knobs defaultMuOffense' (sqrt $ exp defaultSigmaOffense2')
+    defaultMuDefense' (sqrt $ exp defaultSigmaDefense2')
+    (exp sigmaOffense') (exp sigmaDefense')
+    (getMessagePasses knobs)
+    muHomeBonusOffense' (sqrt $ exp sigmaHomeBonusOffense2')
+    muHomeBonusDefense' (sqrt $ exp sigmaHomeBonusDefense2')
 
 main :: IO ()
 main = do

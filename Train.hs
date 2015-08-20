@@ -68,16 +68,16 @@ objective passes trainData valData [ sigmaOffense
     V.sum (V.map loss valData) / fromIntegral (V.length valData)
   where
     parameter = Parameter
-      { _sigmaOffense = sigmaOffense
-      , _sigmaDefense = sigmaDefense
+      { _sigmaOffense = exp $ sigmaOffense
+      , _sigmaDefense = exp $ sigmaDefense
       , _homeBonus = makeSkills
-                     (fromMuSigma2 muHomeBonusOffense sigmaHomeBonusOffense2)
-                     (fromMuSigma2 muHomeBonusDefense sigmaHomeBonusDefense2)
+                     (fromMuSigma2 muHomeBonusOffense $ exp sigmaHomeBonusOffense2)
+                     (fromMuSigma2 muHomeBonusDefense $ exp sigmaHomeBonusDefense2)
       }
 
     defaultPlayer = skills .~ makeSkills
-                    (fromMuSigma2 muOffense sigmaOffense2)
-                    (fromMuSigma2 muDefense sigmaDefense2)
+                    (fromMuSigma2 muOffense $ exp sigmaOffense2)
+                    (fromMuSigma2 muDefense $ exp sigmaDefense2)
                     $ def
 
     model = trainModel passes parameter defaultPlayer trainData
@@ -100,7 +100,7 @@ optimizer :: ([Double] -> Double)
 optimizer f g initX =
   VS.toList
   $ solution
-  $ minimize 5 1e7 1e-5 (Just steps) (repeat (Just 0.0, Nothing))
+  $ minimize 5 1e7 1e-5 (Just steps) (repeat (Nothing, Nothing))
   (VS.fromList initX) wrappedF (VS.fromList . g . VS.toList)
   where
     steps = 100
