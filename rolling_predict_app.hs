@@ -75,7 +75,7 @@ instance Show Prediction where
 instance ToRecord Prediction where
   toRecord p = record $ (toField $ p^.predictionGame.gameID) :
                (toField $ show homeGoals ++ ":" ++ show guestGoals) :
-               (toField $ show predHomeGoals ++ ":" ++ show predHomeGoals) :
+               (toField $ show predHomeGoals ++ ":" ++ show predGuestGoals) :
                map toField (p^.predictionHome) ++
                map toField (p^.predictionGuest)
     where
@@ -157,7 +157,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
                         (evalPlayer defense p)
       where
         (muOffense, sigmaOffense) = toMuSigma2 (p^.skills.offense)
-        (muDefense, sigmaDefense) = toMuSigma2 (p^.skills.offense)
+        (muDefense, sigmaDefense) = toMuSigma2 (p^.skills.defense)
 
 
     roll prediction game =
