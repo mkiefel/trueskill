@@ -24,6 +24,7 @@ import           TrueSkill ( predict
                            , skills
                            , makeSkills
                            , Parameter(..)
+                           , Message
                            , predictionMessage
                            , offense
                            , defense
@@ -35,18 +36,20 @@ import           Types
 import           Parameter
 
 data Prediction = Prediction
-                  { _predictionHome  :: [Double]
-                  , _predictionGuest :: [Double]
-                  , _predictionGame  :: Game
-                  , _predictionModel :: Model Double
+                  { _predictionHome         :: [Double]
+                  , _predictionGuest        :: [Double]
+                  , _predictionHomeMessage  :: Message Double
+                  , _predictionGuestMessage :: Message Double
+                  , _predictionGame         :: Game
+                  , _predictionModel        :: Model Double
                   }
 makeLenses ''Prediction
 
 
-data PlayerOut = PlayerOut { playerName :: !String
-                           , playerMuOffense :: !Double
+data PlayerOut = PlayerOut { playerName         :: !String
+                           , playerMuOffense    :: !Double
                            , playerSigmaOffense :: !Double
-                           , playerMuDefense :: !Double
+                           , playerMuDefense    :: !Double
                            , playerSigmaDefense :: !Double
                            , playerOffenseScore :: !Double
                            , playerDefenseScore :: !Double }
@@ -74,13 +77,23 @@ instance Show Prediction where
 
 instance ToRecord Prediction where
   toRecord p = record $ (toField $ p^.predictionGame.gameID) :
+
                (toField $ show homeGoals ++ ":" ++ show guestGoals) :
                (toField $ show predHomeGoals ++ ":" ++ show predGuestGoals) :
+
+               [toField muPredictionHomeMessage, toField sigma2PredictionHomeMessage] ++
+               [toField muPredictionGuestMessage, toField sigma2PredictionGuestMessage] ++
+
                map toField (p^.predictionHome) ++
                map toField (p^.predictionGuest)
     where
       Result (homeGoals, guestGoals) = p^.predictionGame.result
       (predHomeGoals, predGuestGoals) = score p
+
+      (muPredictionHomeMessage, sigma2PredictionHomeMessage) =
+        toMuSigma2 $ p^.predictionHomeMessage
+      (muPredictionGuestMessage, sigma2PredictionGuestMessage) =
+        toMuSigma2 $ p^.predictionGuestMessage
 
 loss :: Prediction -> Double
 loss p = error' predHomeGoals homeGoals
@@ -120,7 +133,8 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
     let initModel = trainModel (getMessagePasses knobs) parameter
                     defaultPlayer trainData
-    let initPrediction = Prediction undefined undefined undefined initModel
+    let initPrediction = Prediction undefined undefined
+                         undefined undefined undefined initModel
     let predictions = V.scanl' roll initPrediction testData
 
     -- lift $ mapM_ print $ V.toList $ V.tail predictions
@@ -161,18 +175,22 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
 
     roll prediction game =
-        Prediction homeGoals guestGoals game $ model
+        Prediction homeGoals guestGoals fromHomeMessage fromGuestMessage game $
+        model
         -- updateModel parameter defaultPlayer model game
       where
         model = prediction ^. predictionModel
 
         get p = M.lookupDefault defaultPlayer p model
 
+        (fromHomeMessage, fromGuestMessage) =
+          predict parameter
+          ( map get $ game ^. team1
+          , map get $ game ^. team2
+          )
+
         (homeGoals, guestGoals) = both %~ predictionMessage $
-                                  predict parameter
-                                  ( map get $ game ^. team1
-                                  , map get $ game ^. team2
-                                  )
+                                  (fromHomeMessage, fromGuestMessage)
 
     parameter =
       (def :: Parameter Double)
