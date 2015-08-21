@@ -175,7 +175,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
                                   )
 
     parameter =
-      def
+      (def :: Parameter Double)
       { _sigmaOffense = getSigmaOffense knobs
       , _sigmaDefense = getSigmaDefense knobs
       , _homeBonus = makeSkills
