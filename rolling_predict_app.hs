@@ -45,8 +45,8 @@ makeLenses ''Prediction
 predictionSpace :: [Prediction]
 predictionSpace = Prediction <$> [0..9] <*> [0..9]
 
-loss :: Result -> Prediction -> Double
-loss (Result (home, guest)) p =
+loss :: Game -> Result -> Prediction -> Double
+loss _ (Result (home, guest)) p =
   fromIntegral ((home - p^.predictionHome)^(2 :: Int)) +
   fromIntegral ((guest - p^.predictionGuest)^(2 :: Int))
 
@@ -115,15 +115,15 @@ argMax (s:ss) = snd $ foldl' go s ss
         | w > v     = right
         | otherwise = left
 
-decide :: ([Double], [Double]) -> Prediction
-decide probabilities = argMax predictionCosts
+decide :: Game -> ([Double], [Double]) -> Prediction
+decide game probabilities = argMax predictionCosts
   where
     predictionCosts :: [(Double, Prediction)]
     predictionCosts = map (\p -> (predictionCost p, p)) predictionSpace
 
     predictionCost :: Prediction -> Double
-    predictionCost p = sum $ map (\ ((h, hp), (g, gp)) -> -hp * gp *
-                                                          loss (Result (h, g)) p) $
+    predictionCost p = sum $ map (\ ((h, hp), (g, gp)) ->
+                       -hp * gp * loss game (Result (h, g)) p) $
                        ((,) <$>
                        (zip [0..] (fst probabilities)) <*>
                        (zip [0..] (snd probabilities)))
@@ -180,7 +180,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
         probabilities = both %~ predictionMessage $
                         (fromHomeMessage, fromGuestMessage)
-        prediction = decide probabilities
+        prediction = decide game probabilities
 
     parameter =
       (def :: Parameter Double)
