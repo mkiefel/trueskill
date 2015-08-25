@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, OverloadedStrings #-}
 module Types ( Game
              , Model
              , readGamesFromCsv
@@ -8,14 +8,17 @@ module Types ( Game
              , gameID
              )where
 
-import           Control.Lens
+import           Control.Applicative ( (<$>) )
+import           Control.Lens hiding ( (.=) )
 import qualified Data.ByteString.Lazy as BL
-import           Data.Csv ( HasHeader(..)
-                          , decode
+import qualified Data.ByteString as B
+import           Data.ByteString.Char8 ( pack )
+import           Data.Csv ( decodeByName
+                          , FromNamedRecord(..)
+                          , (.:)
                           )
 import qualified Data.HashMap.Strict as M
 import qualified Data.Vector as V
-import           Data.Vector ( (!) )
 
 import           TrueSkill ( Player
                            , Result(..)
@@ -31,28 +34,21 @@ data Game = Game
   } deriving Show
 makeLenses ''Game
 
+instance FromNamedRecord Game where
+  parseNamedRecord m = do
+    goalsHome <- m.: "Goals_Home"
+    goalsGuest <- m.: "Goals_Guest"
+
+    let lookupPlayers base = mapM (\p -> m .: (base `B.append` (pack $ show p)))
+                             ([1..11] :: [Int])
+    teamHome <- lookupPlayers "Player_Home_Name_"
+    teamGuest <- lookupPlayers "Player_Guest_Name_"
+
+    -- teamHome <- (:[]) <$> m.: "Home"
+    -- teamGuest <- (:[]) <$> m.: "Guest"
+
+    Game teamHome teamGuest (Result (goalsHome, goalsGuest))
+      <$> m.: "Game_ID"
+
 readGamesFromCsv :: FilePath -> IO (Either String (V.Vector Game))
-readGamesFromCsv path = BL.readFile path >>= return . decodeCsv
-  where
-    decodeCsv = (V.map parseGame `fmap`) . decode NoHeader
-
--- | Transforms a CSV row into a game.
-parseGame :: V.Vector String -> Game
-parseGame row = Game team1' team2' result' gameID'
-  where
-    -- Players
-    team1' = map (\i -> row!i) [39..39+10]
-    team2' = map (\i -> row!i) [50..50+10]
-    -- Teams
-    -- team1' = map (\i -> row!i) [5]
-    -- team2' = map (\i -> row!i) [6]
-    gameID' = row!0
-
-    [score1String, score2String] = splitBy ':' $ head $ splitBy ' ' $ row!7
-    result' = Result (read score1String, read score2String)
-
-    splitBy delimiter = foldr f [[]]
-      where
-        f c l@(x:xs) | c == delimiter = []:l
-                     | otherwise      = (c:x):xs
-        f _ _                         = undefined
+readGamesFromCsv path =BL.readFile path >>= (\f -> return $ snd <$> decodeByName f)
