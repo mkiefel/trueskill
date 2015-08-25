@@ -1,13 +1,15 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
 
-import           Control.Lens
+import           Control.Lens hiding ( Context, contexts )
 import           Control.Monad.Trans.Either ( EitherT(..)
                                             , runEitherT
                                             , hoistEither )
 import           Control.Monad.Trans.Class ( lift )
+import           Control.Applicative ( (<*>), (<$>) )
 import           Data.Default ( def )
 import qualified Data.HashMap.Strict as M
+import           Data.List ( foldl' )
 import qualified Data.Vector as V
 -- import           Data.List ( sortBy )
 import           Data.Csv ( encode
@@ -29,31 +31,43 @@ import           TrueSkill ( predict
                            , offense
                            , defense
                            , Result(..) )
-import           TrueSkill.Math ( argMax )
 
 import           Train
 import           Types
 import           Parameter
 
 data Prediction = Prediction
-                  { _predictionHome         :: [Double]
-                  , _predictionGuest        :: [Double]
-                  , _predictionHomeMessage  :: Message Double
-                  , _predictionGuestMessage :: Message Double
-                  , _predictionGame         :: Game
-                  , _predictionModel        :: Model Double
+                  { _predictionHome  :: Int
+                  , _predictionGuest :: Int
                   }
 makeLenses ''Prediction
 
+predictionSpace :: [Prediction]
+predictionSpace = Prediction <$> [0..9] <*> [0..9]
 
-data PlayerOut = PlayerOut { playerName         :: !String
-                           , playerMuOffense    :: !Double
-                           , playerSigmaOffense :: !Double
-                           , playerMuDefense    :: !Double
-                           , playerSigmaDefense :: !Double
-                           , playerOffenseScore :: !Double
-                           , playerDefenseScore :: !Double }
-instance ToRecord PlayerOut where
+loss :: Result -> Prediction -> Double
+loss (Result (home, guest)) p =
+  fromIntegral ((home - p^.predictionHome)^(2 :: Int)) +
+  fromIntegral ((guest - p^.predictionGuest)^(2 :: Int))
+
+data Context = Context
+               { _contextPrediction    :: Prediction
+               , _contextProbabilities :: ([Double], [Double])
+               , _contextMessage       :: (Message Double, Message Double)
+               , _contextGame          :: Game
+               , _contextModel         :: Model Double
+               }
+makeLenses ''Context
+
+data LatentPlayer = LatentPlayer
+                    { playerName         :: !String
+                    , playerMuOffense    :: !Double
+                    , playerSigmaOffense :: !Double
+                    , playerMuDefense    :: !Double
+                    , playerSigmaDefense :: !Double
+                    , playerOffenseScore :: !Double
+                    , playerDefenseScore :: !Double }
+instance ToRecord LatentPlayer where
     toRecord p = record $ map (\f -> f p)
                  [ toField . playerName
                  , toField . playerMuOffense
@@ -63,66 +77,56 @@ instance ToRecord PlayerOut where
                  , toField . playerOffenseScore
                  , toField . playerDefenseScore ]
 
-
 instance Show Prediction where
-  show p = printf "(%d, %d):\n" homeGoals guestGoals ++
-           concatMap (printf "%0.2f, ") (p^.predictionHome) ++ "\n" ++
-           concatMap (printf "%0.2f, ") (p^.predictionGuest) ++ "\n" ++
-           printf "-> (%d, %d): (%0.2f)\n" predHomeGoals predGuestGoals
-           (loss p)
+  show p = printf "%d:%d" (p^.predictionHome) (p^.predictionGuest)
+
+instance Show Context where
+  show c = printf "(%d, %d):" homeGoals guestGoals ++
+           " -> " ++ (show $ c^.contextPrediction)
     where
-      Result (homeGoals, guestGoals) = p^.predictionGame.result
+      Result (homeGoals, guestGoals) = c^.contextGame.result
 
-      (predHomeGoals, predGuestGoals) = score p
-
-instance ToRecord Prediction where
-  toRecord p = record $ (toField $ p^.predictionGame.gameID) :
+instance ToRecord Context where
+  toRecord c = record $ (toField $ c^.contextGame.gameID) :
 
                (toField $ show homeGoals ++ ":" ++ show guestGoals) :
-               (toField $ show predHomeGoals ++ ":" ++ show predGuestGoals) :
+               (toField $ show $ c^.contextPrediction) :
 
-               [toField muPredictionHomeMessage, toField sigma2PredictionHomeMessage] ++
-               [toField muPredictionGuestMessage, toField sigma2PredictionGuestMessage] ++
+               [toField muPredictionHomeMessage,
+                toField sigma2PredictionHomeMessage] ++
+               [toField muPredictionGuestMessage,
+                toField sigma2PredictionGuestMessage] ++
 
-               map toField (p^.predictionHome) ++
-               map toField (p^.predictionGuest)
+               map toField (c^.contextProbabilities._1) ++
+               map toField (c^.contextProbabilities._2)
     where
-      Result (homeGoals, guestGoals) = p^.predictionGame.result
-      (predHomeGoals, predGuestGoals) = score p
+      Result (homeGoals, guestGoals) = c^.contextGame.result
 
       (muPredictionHomeMessage, sigma2PredictionHomeMessage) =
-        toMuSigma2 $ p^.predictionHomeMessage
+        toMuSigma2 $ c^.contextMessage._1
       (muPredictionGuestMessage, sigma2PredictionGuestMessage) =
-        toMuSigma2 $ p^.predictionGuestMessage
+        toMuSigma2 $ c^.contextMessage._2
 
-loss :: Prediction -> Double
-loss p = error' predHomeGoals homeGoals
-         + error' predGuestGoals guestGoals
+argMax :: Ord d => [(d, a)] -> a
+argMax []     = undefined
+argMax (s:ss) = snd $ foldl' go s ss
+    where
+    go left@(v, _) right@(w, _)
+        | w > v     = right
+        | otherwise = left
+
+decide :: ([Double], [Double]) -> Prediction
+decide probabilities = argMax predictionCosts
   where
-    Result (homeGoals, guestGoals) = p^.predictionGame.result
+    predictionCosts :: [(Double, Prediction)]
+    predictionCosts = map (\p -> (predictionCost p, p)) predictionSpace
 
-    (predHomeGoals, predGuestGoals) = score p
-
-    error' :: Int -> Int -> Double
-    error' predGoals goals = fromIntegral ((predGoals - goals)^(2 :: Int))
-
-score :: Prediction -> (Int, Int)
-score p = ( bestPrediction (p^.predictionHome)
-          , bestPrediction (p^.predictionGuest) )
-  where
-
-    bestPrediction :: [Double] -> Int
-    bestPrediction = argMax . map (\d -> -d) . predictionCosts
-
-    predictionCosts :: [Double] -> [Double]
-    predictionCosts probs = map (predictionCost probs) $ [0..length probs]
-
-    predictionCost :: [Double] -> Int -> Double
-    predictionCost probs g = sum $ map
-                             (\(g', prob) -> prob
-                                             * fromIntegral ((g' - g)^(2 :: Int)))
-                             $ zip [0..] probs
-
+    predictionCost :: Prediction -> Double
+    predictionCost p = sum $ map (\ ((h, hp), (g, gp)) -> -hp * gp *
+                                                          loss (Result (h, g)) p) $
+                       ((,) <$>
+                       (zip [0..] (fst probabilities)) <*>
+                       (zip [0..] (snd probabilities)))
 
 rollingPredict :: FilePath -> FilePath -> Knobs -> IO (Either String ())
 rollingPredict trainFile testFile knobs = runEitherT $ do
@@ -133,38 +137,22 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
     let initModel = trainModel (getMessagePasses knobs) parameter
                     defaultPlayer trainData
-    let initPrediction = Prediction undefined undefined
-                         undefined undefined undefined initModel
-    let predictions = V.scanl' roll initPrediction testData
+    let initContext = Context undefined undefined undefined undefined initModel
+    let contexts = V.scanl' roll initContext testData
 
-    -- lift $ mapM_ print $ V.toList $ V.tail predictions
+    let finalPrediction = V.last contexts
 
-    let mse = (V.sum $ V.map loss $ V.tail predictions)
-              / fromIntegral ((V.length $ V.tail predictions) * 2)
-    lift $ print mse
-
-    let finalPrediction = V.last predictions
-
-    -- Print the best offense/defense player.
-    -- lift $ print $ sortPlayer (evalPlayer offense) $
-    --   finalPrediction^.predictionModel
-    -- lift $ print $ sortPlayer (evalPlayer defense) $
-    --   finalPrediction^.predictionModel
     lift $ BL.writeFile "player.csv" $ encode $
       map convert $ M.toList $
-      finalPrediction^.predictionModel
+      finalPrediction^.contextModel
     lift $ BL.writeFile "games.csv" $ encode $
-      V.toList $ V.tail predictions
+      V.toList $ V.tail contexts
   where
     evalPlayer skill' p = mu - 2 * sqrt sigma2
       where
         (mu, sigma2) = toMuSigma2 (p^.skills.skill')
 
-    -- sortPlayer l m = sortBy (\(_, s) (_, s') -> compare s s') $
-    --                  mapped._2 %~ l $
-    --                  M.toList m
-
-    convert (name, p) = PlayerOut name
+    convert (name, p) = LatentPlayer name
                         muOffense sigmaOffense
                         muDefense sigmaDefense
                         (evalPlayer offense p)
@@ -174,12 +162,13 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
         (muDefense, sigmaDefense) = toMuSigma2 (p^.skills.defense)
 
 
-    roll prediction game =
-        Prediction homeGoals guestGoals fromHomeMessage fromGuestMessage game $
+    roll context game =
+        Context prediction probabilities
+        (fromHomeMessage, fromGuestMessage) game $
         model
         -- updateModel parameter defaultPlayer model game
       where
-        model = prediction ^. predictionModel
+        model = context ^. contextModel
 
         get p = M.lookupDefault defaultPlayer p model
 
@@ -189,8 +178,9 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
           , map get $ game ^. team2
           )
 
-        (homeGoals, guestGoals) = both %~ predictionMessage $
-                                  (fromHomeMessage, fromGuestMessage)
+        probabilities = both %~ predictionMessage $
+                        (fromHomeMessage, fromGuestMessage)
+        prediction = decide probabilities
 
     parameter =
       (def :: Parameter Double)
