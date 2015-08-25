@@ -6,9 +6,10 @@ module Types ( Game
              , team2
              , result
              , gameID
+             , gameOdds
              )where
 
-import           Control.Applicative ( (<$>) )
+import           Control.Applicative ( (<$>), (<*>) )
 import           Control.Lens hiding ( (.=) )
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
@@ -30,6 +31,7 @@ data Game = Game
   { _team1  :: ![String]
   , _team2  :: ![String]
   , _result :: !Result
+  , _gameOdds :: !(Double, Double, Double)
   , _gameID :: !String
   } deriving Show
 makeLenses ''Game
@@ -47,7 +49,9 @@ instance FromNamedRecord Game where
     -- teamHome <- (:[]) <$> m.: "Home"
     -- teamGuest <- (:[]) <$> m.: "Guest"
 
-    Game teamHome teamGuest (Result (goalsHome, goalsGuest))
+    odds <- (,,) <$> m .: "OddsMeanH" <*> m .: "OddsMeanD" <*> m .: "OddsMeanA"
+
+    Game teamHome teamGuest (Result (goalsHome, goalsGuest)) odds
       <$> m.: "Game_ID"
 
 readGamesFromCsv :: FilePath -> IO (Either String (V.Vector Game))

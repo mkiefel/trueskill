@@ -37,18 +37,23 @@ import           Types
 import           Parameter
 
 data Prediction = Prediction
-                  { _predictionHome  :: Int
-                  , _predictionGuest :: Int
+                  { _predictionHome         :: Int
+                  , _predictionGuest        :: Int
+                  , _predictionExpectedLoss :: Double
                   }
 makeLenses ''Prediction
 
 predictionSpace :: [Prediction]
-predictionSpace = Prediction <$> [0..9] <*> [0..9]
+predictionSpace = Prediction <$> [0..9] <*> [0..9] <*> [0]
 
 loss :: Game -> Result -> Prediction -> Double
-loss _ (Result (home, guest)) p =
-  fromIntegral ((home - p^.predictionHome)^(2 :: Int)) +
-  fromIntegral ((guest - p^.predictionGuest)^(2 :: Int))
+loss game (Result (home, guest)) p
+  | home == guest && p^.predictionHome == p^.predictionGuest = -game^.gameOdds._2
+  | home >  guest && p^.predictionHome >  p^.predictionGuest = -game^.gameOdds._1
+  | home <  guest && p^.predictionHome <  p^.predictionGuest = -game^.gameOdds._3
+  | otherwise                                                = 0
+  -- fromIntegral ((home - p^.predictionHome)^(2 :: Int)) +
+  -- fromIntegral ((guest - p^.predictionGuest)^(2 :: Int))
 
 data Context = Context
                { _contextPrediction    :: Prediction
@@ -78,7 +83,7 @@ instance ToRecord LatentPlayer where
                  , toField . playerDefenseScore ]
 
 instance Show Prediction where
-  show p = printf "%d:%d" (p^.predictionHome) (p^.predictionGuest)
+  show p = printf "%d:%d - %f" (p^.predictionHome) (p^.predictionGuest) (p^.predictionExpectedLoss)
 
 instance Show Context where
   show c = printf "(%d, %d):" homeGoals guestGoals ++
@@ -107,28 +112,30 @@ instance ToRecord Context where
       (muPredictionGuestMessage, sigma2PredictionGuestMessage) =
         toMuSigma2 $ c^.contextMessage._2
 
-argMax :: Ord d => [(d, a)] -> a
-argMax []     = undefined
-argMax (s:ss) = snd $ foldl' go s ss
+argMin :: Ord d => [(d, a)] -> (d, a)
+argMin []     = undefined
+argMin (s:ss) = foldl' go s ss
     where
     go left@(v, _) right@(w, _)
-        | w > v     = right
+        | w < v     = right
         | otherwise = left
 
 decide :: Game -> ([Double], [Double]) -> Prediction
-decide game probabilities = argMax predictionCosts
+decide game probabilities = prediction { _predictionExpectedLoss = minLoss }
   where
+    (minLoss, prediction) = argMin predictionCosts
+
     predictionCosts :: [(Double, Prediction)]
     predictionCosts = map (\p -> (predictionCost p, p)) predictionSpace
 
     predictionCost :: Prediction -> Double
     predictionCost p = sum $ map (\ ((h, hp), (g, gp)) ->
-                       -hp * gp * loss game (Result (h, g)) p) $
+                       hp * gp * loss game (Result (h, g)) p) $
                        ((,) <$>
                        (zip [0..] (fst probabilities)) <*>
                        (zip [0..] (snd probabilities)))
 
-rollingPredict :: FilePath -> FilePath -> Knobs -> IO (Either String ())
+rollingPredict :: FilePath -> FilePath -> Knobs -> IO (Either String Double)
 rollingPredict trainFile testFile knobs = runEitherT $ do
     trainData <- hoistEither =<<
                  lift (readGamesFromCsv trainFile)
@@ -147,6 +154,11 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
       finalPrediction^.contextModel
     lift $ BL.writeFile "games.csv" $ encode $
       V.toList $ V.tail contexts
+
+    return $ (V.sum $ V.map
+      (\c -> (loss (c^.contextGame) (c^.contextGame.result) (c^.contextPrediction) + 1)) $
+      V.filter (\c -> c^.contextPrediction.predictionExpectedLoss + 1 < 0) $
+      V.tail contexts)
   where
     evalPlayer skill' p = mu - 2 * sqrt sigma2
       where
