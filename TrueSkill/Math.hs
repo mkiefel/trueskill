@@ -31,17 +31,16 @@ choose n k = choose (n-1) (k-1) * n `div` k
 -- Taken from http://en.wikipedia.org/wiki/Error_function
 erf :: (Floating d, Ord d) => d -> d
 erf x
-    | x < 0     = -erf(-x)
-    | otherwise = 1 - 1 / (1 +
-                           a1*x +
-                           a2*x^(2 :: Int) +
-                           a3*x^(3 :: Int) +
-                           a4*x^(4 :: Int))^(4 :: Int)
+    | x < 0     = -erf (-x)
+    | otherwise = 1 - 1 / (1 + a1*x + a2*x**2 + a3*x**3 + a4*x**4 + a5*x**5 +
+                           a6*x**6)**16
   where
-    a1 = 0.278393
-    a2 = 0.230389
-    a3 = 0.000972
-    a4 = 0.078108
+    a1 = 0.0705230784
+    a2 = 0.0422820123
+    a3 = 0.0092705272
+    a4 = 0.0001520143
+    a5 = 0.0002765672
+    a6 = 0.0000430638
 {-# SPECIALISE erf :: Double -> Double #-}
 {-# SPECIALISE erf :: AD -> AD #-}
 
