@@ -22,6 +22,8 @@ import           TrueSkill.Math ( choose
                                 )
 import           TrueSkill.Autodiff
 
+import           Debug.Trace
+
 -- | Implements the integral of
 -- \int x^k \exp (-0.5 \pi (x - (\tau - 1)/\pi)^2) \dx
 -- for any k (the observation of the Poisson distribution)
@@ -55,8 +57,8 @@ predictionMessage message = map ( / partition ) distribution
 -- Gaussian message and the observation of a Poisson factor attached to it.
 epMessage :: (Floating d, Ord d, Erf d) => Int -> Message d -> Message d
 epMessage k message
-  | newPi_ < pi_' = message
-  | otherwise     =
+  | newPi_ < pi_' = trace "epMessage" undefined
+  | otherwise =
       Message { _pi_ = newPi_
               , _tau = newTau
               }
