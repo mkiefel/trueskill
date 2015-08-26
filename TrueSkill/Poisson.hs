@@ -54,7 +54,9 @@ predictionMessage message = map ( / partition ) distribution
 -- | Approximates the state distribution of a variable including the incoming
 -- Gaussian message and the observation of a Poisson factor attached to it.
 epMessage :: (Floating d, Ord d, Erf d) => Int -> Message d -> Message d
-epMessage k message =
+epMessage k message
+  | newPi_ < pi_' = message
+  | otherwise     =
       Message { _pi_ = newPi_
               , _tau = newTau
               }
