@@ -20,7 +20,7 @@ import           Train
 import           Debug.Trace
 
 scale :: Double
-scale = 10.0
+scale = 1
 
 parallelObjectiveGrad :: Int -> V.Vector Game -> V.Vector Game
                       -> [Double] -> [Double]
