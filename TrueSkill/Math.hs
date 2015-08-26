@@ -16,10 +16,14 @@ module TrueSkill.Math
   , choose
   , fac
   , doubleFac
+  , monomialGaussUpper
   )
   where
 
+import           Data.Number.Erf
+
 import           TrueSkill.Autodiff
+
 
 -- | Binomial coefficient.
 choose :: Int -> Int -> Int
@@ -27,25 +31,8 @@ choose _ 0 = 1
 choose 0 _ = 0
 choose n k = choose (n-1) (k-1) * n `div` k
 
--- | Direct implemntation of error function to make it differentiable.
--- Taken from http://en.wikipedia.org/wiki/Error_function
-erf :: (Floating d, Ord d) => d -> d
-erf x
-    | x < 0     = -erf (-x)
-    | otherwise = 1 - 1 / (1 + a1*x + a2*x**2 + a3*x**3 + a4*x**4 + a5*x**5 +
-                           a6*x**6)**16
-  where
-    a1 = 0.0705230784
-    a2 = 0.0422820123
-    a3 = 0.0092705272
-    a4 = 0.0001520143
-    a5 = 0.0002765672
-    a6 = 0.0000430638
-{-# SPECIALISE erf :: Double -> Double #-}
-{-# SPECIALISE erf :: AD -> AD #-}
-
 -- | Cummulative density function of a normal Gaussion distribution.
-normCdf :: (Floating d, Ord d) => d -> d
+normCdf :: (Floating d, Ord d, Erf d) => d -> d
 normCdf x = 0.5 * (1 + erf (x / sqrt 2))
 {-# SPECIALISE normCdf :: Double -> Double #-}
 {-# SPECIALISE normCdf :: AD -> AD #-}
@@ -71,7 +58,7 @@ gauss :: Floating d => d -> d
 gauss x = exp (-0.5 * x^(2 :: Int))
 
 -- | Integral primitiv for \int \gauss(x) \dx.
-normPrimitive :: (Floating d, Ord d) => d -> d
+normPrimitive :: (Floating d, Ord d, Erf d) => d -> d
 normPrimitive x = normCdf x * sqrt (2 * pi)
 {-# SPECIALISE normPrimitive :: Double -> Double #-}
 {-# SPECIALISE normPrimitive :: AD -> AD #-}
@@ -83,7 +70,7 @@ firstPrimitive x = -gauss x
 {-# SPECIALISE firstPrimitive :: AD -> AD #-}
 
 -- | Integral primitiv for \int x^2 \gauss(x) \dx.
-secondPrimitive :: (Floating d, Ord d) => d -> d
+secondPrimitive :: (Floating d, Ord d, Erf d) => d -> d
 secondPrimitive x = normCdf x * sqrt (2 * pi) - x * gauss x
 {-# SPECIALISE secondPrimitive :: Double -> Double #-}
 {-# SPECIALISE secondPrimitive :: AD -> AD #-}
@@ -99,7 +86,7 @@ oddPrimitive i x =
 {-# SPECIALISE oddPrimitive :: Int -> AD -> AD #-}
 
 -- | Integral primitiv for \int x^{2*i+2} \gauss(x) \dx.
-evenPrimitive :: (Floating d, Ord d) => Int -> d -> d
+evenPrimitive :: (Floating d, Ord d, Erf d) => Int -> d -> d
 evenPrimitive i x =
     -gauss x
     * sum [fromIntegral (doubleFac (2 * i + 1))
@@ -110,7 +97,7 @@ evenPrimitive i x =
 {-# SPECIALISE evenPrimitive :: Int -> AD -> AD #-}
 
 -- | Convenience functions for integrals of monomials and Gaussians.
-monomialGauss :: (Floating d, Ord d) => Int -> d -> d -> d
+monomialGauss :: (Floating d, Ord d, Erf d) => Int -> d -> d -> d
 monomialGauss 0 lower upper = normPrimitive upper - normPrimitive lower
 monomialGauss 1 lower upper = firstPrimitive upper - firstPrimitive lower
 monomialGauss 2 lower upper = secondPrimitive upper - secondPrimitive lower

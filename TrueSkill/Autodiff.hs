@@ -3,6 +3,8 @@ module TrueSkill.Autodiff where
 
 import           Linear  hiding ( trace )
 
+import           Data.Number.Erf
+
 import           Debug.Trace
 
 data AD = AD
@@ -37,6 +39,9 @@ instance Num (AD) where
   abs = trace "abs" undefined
   signum = trace "signum" undefined
   fromInteger i = AD (fromInteger i) zero
+
+instance Erf (AD) where
+  erf (AD d v) = AD (erf d) ((2 / sqrt pi * exp (-d^(2 :: Int))) *^ v)
 
 instance Fractional (AD) where
   (/) (AD d v) (AD e w) = AD (d / e)

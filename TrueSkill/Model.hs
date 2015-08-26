@@ -19,6 +19,7 @@ import qualified Data.HashMap.Strict as M
 import           Data.Default
 import           Control.DeepSeq
 import           Data.List ( foldl' )
+import           Data.Number.Erf
 
 import           TrueSkill.Message
 import qualified TrueSkill.Poisson as Poisson
@@ -101,7 +102,7 @@ fuse2 :: (t1 -> t2 -> s) -> (t1, t1) -> (t2, t2) -> (s, s)
 fuse2 f (a, a_) (b, b_) = (f a b, f a_ b_)
 
 -- | Updates the skills of a set of players given a game.
-train :: (Floating d, Ord d)
+train :: (Floating d, Ord d, Erf d)
     => Parameter d -> GameID -> Result -> ([Player d], [Player d])
     -> ([Player d], [Player d])
 train parameter gameID result players =
@@ -159,7 +160,7 @@ predict parameter players = toDifferenceMsgs
                        -> (Message AD, Message AD) #-}
 
 -- | A complete message pass down to the observed result variable and back.
-treePass :: (Floating d, Ord d)
+treePass :: (Floating d, Ord d, Erf d)
     => Parameter d -> Result -> ([Skills d], [Skills d])
     -> ([Skills d], [Skills d])
 treePass parameter (Result result) playerSkills =

@@ -13,6 +13,7 @@ module TrueSkill.Poisson
   where
 
 import           Control.Lens ( (^.) )
+import           Data.Number.Erf
 
 import           TrueSkill.Message
 import           TrueSkill.Math ( choose
@@ -28,7 +29,7 @@ import           TrueSkill.Autodiff
 -- Gaussian message.
 --
 -- The Gaussian message is defined to be
-integral :: (Floating d, Ord d) => Int -> d -> d -> d
+integral :: (Floating d, Ord d, Erf d) => Int -> d -> d -> d
 integral k pi_' tau' =
     sum [fromIntegral (choose k i)
          * (tau' - 1) ^ (k - i)
@@ -38,7 +39,7 @@ integral k pi_' tau' =
 {-# SPECIALISE integral :: Int -> Double -> Double -> Double #-}
 {-# SPECIALISE integral :: Int -> AD -> AD -> AD #-}
 
-predictionMessage :: (Floating d, Ord d) => Message d -> [d]
+predictionMessage :: (Floating d, Ord d, Erf d) => Message d -> [d]
 predictionMessage message = map ( / partition ) distribution
   where
     pi_' = message ^. pi_

@@ -6,6 +6,7 @@ import qualified Data.HashMap.Strict as M
 import           Data.List ( foldl' )
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as VS
+import           Data.Number.Erf
 
 import           Numeric.LBFGSB
 import           Numeric.LBFGSB.Result ( solution )
@@ -24,7 +25,7 @@ import           Types
 
 import           Debug.Trace
 
-updateModel :: (Floating d, Ord d, Show d)
+updateModel :: (Floating d, Ord d, Show d, Erf d)
     => Parameter d -> Player d -> Model d -> Game -> Model d
 updateModel parameter defaultPlayer players game = updatedModel
   where
@@ -45,14 +46,14 @@ updateModel parameter defaultPlayer players game = updatedModel
 
     get p = M.lookupDefault defaultPlayer p players
 
-trainModel :: (Floating d, Ord d, Show d)
+trainModel :: (Floating d, Ord d, Show d, Erf d)
     => Int -> Parameter d -> Player d -> V.Vector Game -> Model d
 trainModel passes parameter defaultPlayer games =
     foldl' singlePass M.empty $ replicate passes games
   where
     singlePass = V.foldl' (updateModel parameter defaultPlayer)
 
-objective :: (Floating d, Ord d, Show d) =>
+objective :: (Floating d, Ord d, Show d, Erf d) =>
              Int -> V.Vector Game -> V.Vector Game -> [d] -> d
 objective passes trainData valData [ sigmaOffense
                                    , sigmaDefense

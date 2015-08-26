@@ -54,6 +54,7 @@ executable bench
                      , criterion
                      , l-bfgs-b
                      , array
+                     , erf
   -- hs-source-dirs:
   default-language:    Haskell2010
 
@@ -69,6 +70,7 @@ test-suite test_autodiff
                      , test-framework
                      , test-framework-quickcheck2
                      , QuickCheck
+                     , erf
   -- hs-source-dirs:
   default-language:    Haskell2010
 
@@ -92,6 +94,7 @@ executable rolling_predict
                      , aeson
                      , l-bfgs-b
                      , array
+                     , erf
   -- hs-source-dirs:
   default-language:    Haskell2010
 
