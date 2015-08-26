@@ -55,18 +55,19 @@ trainModel passes parameter defaultPlayer games =
 
 objective :: (Floating d, Ord d, Show d, Erf d) =>
              Int -> V.Vector Game -> V.Vector Game -> [d] -> d
-objective passes trainData valData [ sigmaOffense
-                                   , sigmaDefense
-                                   , muOffense
-                                   , sigmaOffense2
-                                   , muDefense
-                                   , sigmaDefense2
-                                   , muHomeBonusOffense
-                                   , sigmaHomeBonusOffense2
-                                   , muHomeBonusDefense
-                                   , sigmaHomeBonusDefense2
-                                   ] =
-    V.sum (V.map loss valData) / fromIntegral (V.length valData)
+objective passes trainData valData ps@[ sigmaOffense
+                                      , sigmaDefense
+                                      , muOffense
+                                      , sigmaOffense2
+                                      , muDefense
+                                      , sigmaDefense2
+                                      , muHomeBonusOffense
+                                      , sigmaHomeBonusOffense2
+                                      , muHomeBonusDefense
+                                      , sigmaHomeBonusDefense2
+                                      ] =
+    V.sum (V.map loss valData) / fromIntegral (V.length valData) +
+    (sum $ map (^(2::Int)) ps) * 0.001
   where
     parameter = Parameter
       { _sigmaOffense = exp $ sigmaOffense
