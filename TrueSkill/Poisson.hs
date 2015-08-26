@@ -17,7 +17,7 @@ import           Data.Number.Erf
 
 import           TrueSkill.Message
 import           TrueSkill.Math ( choose
-                                , monomialGauss
+                                , monomialGaussUpper
                                 , fac
                                 )
 import           TrueSkill.Autodiff
@@ -34,7 +34,7 @@ integral k pi_' tau' =
     sum [fromIntegral (choose k i)
          * (tau' - 1) ^ (k - i)
          / sqrt pi_' ^ (2*k - i + 1)
-         * monomialGauss i (-(tau' - 1) / sqrt pi_') 20
+         * monomialGaussUpper i (-(tau' - 1) / sqrt pi_')
         | i <- [0 .. k]]
 {-# SPECIALISE integral :: Int -> Double -> Double -> Double #-}
 {-# SPECIALISE integral :: Int -> AD -> AD -> AD #-}

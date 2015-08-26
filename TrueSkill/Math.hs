@@ -63,17 +63,32 @@ normPrimitive x = normCdf x * sqrt (2 * pi)
 {-# SPECIALISE normPrimitive :: Double -> Double #-}
 {-# SPECIALISE normPrimitive :: AD -> AD #-}
 
+normPrimitiveUpper :: Floating d => d
+normPrimitiveUpper = sqrt (2 * pi)
+{-# SPECIALISE normPrimitiveUpper :: Double #-}
+{-# SPECIALISE normPrimitiveUpper :: AD #-}
+
 -- | Integral primitiv for \int x \gauss(x) \dx.
 firstPrimitive :: Floating d => d -> d
 firstPrimitive x = -gauss x
 {-# SPECIALISE firstPrimitive :: Double -> Double #-}
 {-# SPECIALISE firstPrimitive :: AD -> AD #-}
 
+firstPrimitiveUpper :: Floating d => d
+firstPrimitiveUpper = 0
+{-# SPECIALISE firstPrimitiveUpper :: Double #-}
+{-# SPECIALISE firstPrimitiveUpper :: AD #-}
+
 -- | Integral primitiv for \int x^2 \gauss(x) \dx.
 secondPrimitive :: (Floating d, Ord d, Erf d) => d -> d
 secondPrimitive x = normCdf x * sqrt (2 * pi) - x * gauss x
 {-# SPECIALISE secondPrimitive :: Double -> Double #-}
 {-# SPECIALISE secondPrimitive :: AD -> AD #-}
+
+secondPrimitiveUpper :: Floating d => d
+secondPrimitiveUpper = sqrt (2 * pi)
+{-# SPECIALISE secondPrimitiveUpper :: Double #-}
+{-# SPECIALISE secondPrimitiveUpper :: AD #-}
 
 -- | Integral primitiv for \int x^{2*i+1} \gauss(x) \dx.
 oddPrimitive :: Floating d => Int -> d -> d
@@ -84,6 +99,11 @@ oddPrimitive i x =
           | j <- [0 .. i]]
 {-# SPECIALISE oddPrimitive :: Int -> Double -> Double #-}
 {-# SPECIALISE oddPrimitive :: Int -> AD -> AD #-}
+
+oddPrimitiveUpper :: Floating d => Int -> d
+oddPrimitiveUpper _ = 0
+{-# SPECIALISE oddPrimitiveUpper :: Int -> Double #-}
+{-# SPECIALISE oddPrimitiveUpper :: Int -> AD #-}
 
 -- | Integral primitiv for \int x^{2*i+2} \gauss(x) \dx.
 evenPrimitive :: (Floating d, Ord d, Erf d) => Int -> d -> d
@@ -96,6 +116,12 @@ evenPrimitive i x =
 {-# SPECIALISE evenPrimitive :: Int -> Double -> Double #-}
 {-# SPECIALISE evenPrimitive :: Int -> AD -> AD #-}
 
+evenPrimitiveUpper :: (Floating d, Ord d, Erf d) => Int -> d
+evenPrimitiveUpper i =
+    fromIntegral (doubleFac (2 * i + 1)) * sqrt(2*pi)
+{-# SPECIALISE evenPrimitiveUpper :: Int -> Double #-}
+{-# SPECIALISE evenPrimitiveUpper :: Int -> AD #-}
+
 -- | Convenience functions for integrals of monomials and Gaussians.
 monomialGauss :: (Floating d, Ord d, Erf d) => Int -> d -> d -> d
 monomialGauss 0 lower upper = normPrimitive upper - normPrimitive lower
@@ -107,3 +133,14 @@ monomialGauss n lower upper
     where n' = n `div` 2
 {-# SPECIALISE monomialGauss :: Int -> Double -> Double -> Double #-}
 {-# SPECIALISE monomialGauss :: Int -> AD -> AD -> AD #-}
+
+monomialGaussUpper :: (Floating d, Ord d, Erf d) => Int -> d -> d
+monomialGaussUpper 0 lower = normPrimitiveUpper - normPrimitive lower
+monomialGaussUpper 1 lower = firstPrimitiveUpper - firstPrimitive lower
+monomialGaussUpper 2 lower = secondPrimitiveUpper - secondPrimitive lower
+monomialGaussUpper n lower
+    | odd n     = oddPrimitiveUpper n' - oddPrimitive n' lower
+    | otherwise = evenPrimitiveUpper (n' - 1) - evenPrimitive (n' - 1) lower
+    where n' = n `div` 2
+{-# SPECIALISE monomialGaussUpper :: Int -> Double -> Double #-}
+{-# SPECIALISE monomialGaussUpper :: Int -> AD -> AD #-}
