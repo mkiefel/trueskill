@@ -1,9 +1,9 @@
 {
-    "SigmaOffense": 2.0e-2,
-    "SigmaDefense": 2.0e-2,
-    "DefaultMuOffense": 0.2727272727272727,
+    "SigmaOffense": 2.0e-1,
+    "SigmaDefense": 2.0e-1,
+    "DefaultMuOffense": 0.1,
     "DefaultSigmaOffense": 0.1,
-    "DefaultMuDefense": 9.090909090909091e-2,
+    "DefaultMuDefense": -0.1,
     "DefaultSigmaDefense": 0.1,
     "MessagePasses": 5,
     "MuHomeBonusOffense": 0,
