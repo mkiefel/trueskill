@@ -9,9 +9,10 @@ import           Control.Monad.Trans.Class ( lift )
 import           Control.Applicative ( (<*>), (<$>) )
 import           Data.Default ( def )
 import qualified Data.HashMap.Strict as M
-import           Data.List ( foldl' )
+import           Data.List ( foldl'
+                           , intercalate
+                           , sortBy )
 import qualified Data.Vector as V
--- import           Data.List ( sortBy )
 import           Data.Csv ( encode
                           , ToRecord(..)
                           , record
@@ -24,6 +25,7 @@ import           TrueSkill ( predict
                            , fromMuSigma2
                            , toMuSigma2
                            , skills
+                           , games
                            , makeSkills
                            , Parameter(..)
                            , Message
@@ -71,7 +73,9 @@ data LatentPlayer = LatentPlayer
                     , playerMuDefense    :: !Double
                     , playerSigmaDefense :: !Double
                     , playerOffenseScore :: !Double
-                    , playerDefenseScore :: !Double }
+                    , playerDefenseScore :: !Double
+                    , playerGames        :: Int
+                    }
 instance ToRecord LatentPlayer where
     toRecord p = record $ map (\f -> f p)
                  [ toField . playerName
@@ -149,17 +153,36 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
 
     let finalPrediction = V.last contexts
 
-    lift $ BL.writeFile "player.csv" $ encode $
-      map convert $ M.toList $
-      finalPrediction^.contextModel
+    let latentPlayers = map convert $ M.toList $
+                        finalPrediction^.contextModel
+
+    lift $ BL.writeFile "player.csv" $ encode $ latentPlayers
     lift $ BL.writeFile "games.csv" $ encode $
       V.toList $ V.tail contexts
+
+    lift $ putStrLn "Offense:"
+    lift $ putStrLn $ intercalate "\n" $ map playerName $ take 12
+      $ sortLadder playerOffenseScore latentPlayers
+    lift $ putStrLn ""
+
+    lift $ putStrLn "Defense:"
+    lift $ putStrLn $ intercalate "\n" $ map playerName $ take 12
+      $ sortLadder playerDefenseScore latentPlayers
+    lift $ putStrLn ""
+
 
     return $ (V.sum $ V.map
       (\c -> (loss (c^.contextGame) (c^.contextGame.result) (c^.contextPrediction) + 1)) $
       V.filter (\c -> c^.contextPrediction.predictionExpectedLoss + 1 < 0) $
       V.tail contexts)
   where
+    sortLadder crit players =
+      reverse
+      $ sortBy (\p p' ->
+                  compare (crit p) (crit p'))
+      $ filter (\p -> playerGames p >= 30)
+      players
+
     evalPlayer skill' p = mu - 2 * sqrt sigma2
       where
         (mu, sigma2) = toMuSigma2 (p^.skills.skill')
@@ -169,6 +192,7 @@ rollingPredict trainFile testFile knobs = runEitherT $ do
                         muDefense sigmaDefense
                         (evalPlayer offense p)
                         (evalPlayer defense p)
+                        (length $ M.toList $ p^.games)
       where
         (muOffense, sigmaOffense) = toMuSigma2 (p^.skills.offense)
         (muDefense, sigmaDefense) = toMuSigma2 (p^.skills.defense)

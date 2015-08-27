@@ -17,6 +17,7 @@ module TrueSkill
   , sigmaOffense
   , sigmaDefense
   , skills
+  , games
   , makeSkills
   , Parameter(..)
   , Player
@@ -37,6 +38,7 @@ import           TrueSkill.Model ( predict
                                  , sigmaOffense
                                  , sigmaDefense
                                  , skills
+                                 , games
                                  , makeSkills
                                  , Parameter(..)
                                  , Player
